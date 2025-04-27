@@ -1,11 +1,11 @@
 import os
+from typing import Union
 
 import cv2
 import imageio
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
-from tabulate import tabulate
 from tqdm import tqdm
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -61,8 +61,6 @@ class EvalProgressGifCallback(BaseCallback):
         self.step_reached_optimal = None
         # Force evaluation at step 0
         self.last_eval_step = -self.eval_interval
-        self._on_step()
-
         self.pbar = tqdm(
             total=self.total_timesteps,
             desc="Training Progress",
@@ -72,6 +70,7 @@ class EvalProgressGifCallback(BaseCallback):
             dynamic_ncols=True,
         )
         self._last_num_timesteps = 0
+        self._on_step()
 
     def _on_step(self) -> bool:
         # Update progress bar
@@ -176,7 +175,7 @@ class EvalProgressGifCallback(BaseCallback):
                 action, _ = self.model.predict(obs, deterministic=True)
                 obs, rewards, dones, infos = self.gif_env.step(action)
 
-                frame = self.gif_env.render(mode="rgb_array")
+                frame = self.gif_env.render()
                 episode_frames.append(frame)
 
                 if dones[0]:
@@ -230,5 +229,3 @@ class ProgressBarCallback(BaseCallback):
 
     def _on_training_end(self):
         self.pbar.close()
-
-
