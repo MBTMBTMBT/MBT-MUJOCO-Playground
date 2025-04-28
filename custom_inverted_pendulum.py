@@ -333,7 +333,7 @@ if __name__ == "__main__":
     total_timesteps = 75_000
     eval_interval = total_timesteps // 25
     eval_episodes = env_configs["eval"]["n_states"]
-    optimal_score = max_steps * 0.9  # Max episode steps
+    optimal_score = max_steps * 0.95  # Max episode steps
 
     # Prepare callback
     callback = EvalProgressGifCallback(
@@ -369,10 +369,10 @@ if __name__ == "__main__":
         callback=callback,
     )
 
-    total_timesteps = 250_000
+    total_timesteps = 150_000
     eval_interval = total_timesteps // 25
     eval_episodes = env_configs["eval"]["n_states"]
-    optimal_score = max_steps * 0.9  # Max episode steps
+    optimal_score = max_steps * 0.95  # Max episode steps
 
     # Prepare callback
     callback = EvalProgressGifCallback(
