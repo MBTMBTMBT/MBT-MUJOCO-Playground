@@ -121,6 +121,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         n_states: int = 100,
         init_ranges: dict = None,
         sample_mode: str = "random",
+        dense_reward: bool = False,
         seed: int = None,
         **kwargs,
     ):
@@ -130,6 +131,10 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         )
         super().__init__(xml_file=modified_xml_file, **kwargs)
         self._temp_xml_path = modified_xml_file
+
+        self.dense_reward = dense_reward
+        self.cart_range = 1.0
+        self.length = length
 
         # Initialise RNG for determinism if seed is provided.
         self._rng = np.random.default_rng(seed)
@@ -200,6 +205,25 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         info = {}
         return obs, info
 
+    def step(self, action):
+        obs, reward, terminated, truncated, info = super().step(action)
+        if self.dense_reward:
+            # Get current cart position and pole angle (assuming obs[0] is cart position, obs[2] is pole angle)
+            cart_pos = obs[0]
+            pole_angle = obs[2]  # pole angle in radians
+
+            # Calculate horizontal position of the pole tip
+            pole_tip_pos = cart_pos + self.length * np.sin(pole_angle)
+
+            # Normalize distance: absolute distance of pole tip from the center line,
+            # divided by the maximum possible (cart max range + pole length)
+            max_dist = self.cart_range + self.length
+            distance = np.abs(pole_tip_pos)
+            norm_dist = distance / max_dist
+            reward = 1.0 - norm_dist  # Best is at the center line (reward=1), drops with distance
+
+        return obs, reward, terminated, truncated, info
+
     def set_state(self, qpos, qvel):
         """
         Set the state of the MuJoCo simulator explicitly.
@@ -231,90 +255,85 @@ if __name__ == "__main__":
     from stable_baselines3 import SAC
     from utils import EvalProgressGifCallback
     import numpy as np
+    from gymnasium.wrappers import TimeLimit
+    from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 
     # Create output directory for logs and results
     save_dir = "./exp_results"
     os.makedirs(save_dir, exist_ok=True)
 
-    # ----------- Training: random initialisation -----------
-    # Large init ranges, random sampling
-    train_init_ranges = {
-        'cart_position': (-0.25, 0.25),
-        'cart_velocity': (-0.1, 0.1),
-        'pole_angle': (-0.1, 0.1),
-        'pole_ang_vel': (-0.1, 0.1),
+    # Common environment arguments
+    common_kwargs = dict(
+        length=1.5,
+        pole_density=1500,
+        cart_density=600,
+        xml_file="./assets/inverted_pendulum.xml"
+    )
+
+    # List of settings for train/eval/gif envs, with only what changes
+    env_configs = {
+        "train": dict(
+            n_states=20,
+            init_ranges={
+                'cart_position': (-0.25, 0.25),
+                'cart_velocity': (-0.1, 0.1),
+                'pole_angle': (-0.1, 0.1),
+                'pole_ang_vel': (-0.1, 0.1),
+            },
+            init_dist="uniform",
+            sample_mode="random",
+            dense_reward=True,
+            seed=42,
+            render_mode=None,
+        ),
+        "eval": dict(
+            n_states=32,
+            init_ranges={
+                'cart_position': (-0.25, 0.25),
+                'cart_velocity': (-0.1, 0.1),
+                'pole_angle': (-0.1, 0.1),
+                'pole_ang_vel': (-0.1, 0.1),
+            },
+            init_dist="uniform",
+            sample_mode="sequential",
+            dense_reward=True,
+            seed=123,
+            render_mode=None,
+        ),
+        "gif": dict(
+            n_states=32,
+            init_ranges={
+                'cart_position': (-0.25, 0.25),
+                'cart_velocity': (-0.1, 0.1),
+                'pole_angle': (-0.1, 0.1),
+                'pole_ang_vel': (-0.1, 0.1),
+            },
+            init_dist="uniform",
+            sample_mode="sequential",
+            dense_reward=True,
+            seed=123,
+            render_mode="rgb_array"
+        )
     }
-    n_train_states = 20
+
     max_steps = 500
     n_envs = 10
 
-    def make_train_env():
-        env = CustomInvertedPendulum(
-            length=0.7,
-            pole_density=1100,
-            cart_density=950,
-            xml_file="./assets/inverted_pendulum.xml",
-            n_states=n_train_states,
-            init_ranges=train_init_ranges,
-            init_dist="uniform",
-            sample_mode="random",
-            seed=42,
-        )
+    # Generic environment factory
+    def make_env(env_type):
+        """Create an environment by type ('train', 'eval', 'gif')."""
+        kwargs = {**common_kwargs, **env_configs[env_type]}
+        env = CustomInvertedPendulum(**kwargs)
         env = TimeLimit(env, max_episode_steps=max_steps)
         return env
 
-    train_env = SubprocVecEnv([make_train_env] * n_envs)
+    train_env = SubprocVecEnv([lambda: make_env("train")] * n_envs)
+    eval_env = DummyVecEnv([lambda: make_env("eval")])
+    gif_env = DummyVecEnv([lambda: make_env("gif")])
 
-    # ----------- Evaluation: sequential initialisation -----------
-    # Slightly fewer states, using sequential order for thorough testing
-    test_init_ranges = {
-        'cart_position': (-0.25, 0.25),
-        'cart_velocity': (-0.1, 0.1),
-        'pole_angle': (-0.1, 0.1),
-        'pole_ang_vel': (-0.1, 0.1),
-    }
-    n_test_states = 32
-
-    def make_eval_env():
-        env = CustomInvertedPendulum(
-            length=0.7,
-            pole_density=1100,
-            cart_density=950,
-            xml_file="./assets/inverted_pendulum.xml",
-            n_states=n_test_states,
-            init_ranges=test_init_ranges,
-            init_dist="uniform",
-            sample_mode="sequential",
-            seed=123,
-        )
-        env = TimeLimit(env, max_episode_steps=max_steps)
-        return env
-
-    eval_env = DummyVecEnv([make_train_env])
-
-    # Use a separate env for GIFs, same as eval_env for simplicity
-    def make_gif_env():
-        env = CustomInvertedPendulum(
-            length=0.7,
-            pole_density=1100,
-            cart_density=950,
-            xml_file="./assets/inverted_pendulum.xml",
-            n_states=n_test_states,
-            init_ranges=test_init_ranges,
-            init_dist="uniform",
-            sample_mode="sequential",
-            seed=123,
-            render_mode="rgb_array",
-        )
-        env = TimeLimit(env, max_episode_steps=max_steps)
-        return env
-
-    gif_env = DummyVecEnv([make_gif_env])
-
-    # SAC hyperparameters (basic for demo)
-    total_timesteps = 100_000
-    eval_interval = 50 * n_envs
-    eval_episodes = n_test_states
+    total_timesteps = 50_000
+    eval_interval = total_timesteps // 50
+    eval_episodes = env_configs["eval"]["n_states"]
     optimal_score = max_steps  # Max episode steps
 
     # Prepare callback
@@ -327,11 +346,11 @@ if __name__ == "__main__":
         total_timesteps=total_timesteps,
         optimal_score=optimal_score,
         gif_env=gif_env,
-        gif_num_episodes=n_test_states,
+        gif_num_episodes=env_configs["gif"]["n_states"],
         verbose=1,
     )
 
-    # Vectorised env for better performance if required; here single env
+    # Create model
     model = SAC(
         "MlpPolicy",
         train_env,
@@ -345,7 +364,7 @@ if __name__ == "__main__":
         tensorboard_log=os.path.join(save_dir, "tb"),
     )
 
-    # ----------- Train with callback -----------
+    # Train model
     model.learn(
         total_timesteps=total_timesteps,
         callback=callback,
