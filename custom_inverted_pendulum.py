@@ -4,6 +4,7 @@ import mujoco
 from gymnasium.envs.mujoco.inverted_pendulum_v5 import InvertedPendulumEnv
 import tempfile
 import xml.etree.ElementTree as ET
+import numpy as np
 
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
@@ -219,7 +220,11 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
             max_dist = self.cart_range + self.length
             distance = np.abs(pole_tip_pos)
             norm_dist = distance / max_dist
-            reward = 1.0 - norm_dist  # Best is at the center line (reward=1), drops with distance
+
+            # Exponential reward: closer to the center line, higher the reward at a much faster rate.
+            # alpha > 0 adjusts the steepness, typical value in [3, 10]
+            alpha = 7.0
+            reward = np.exp(-alpha * norm_dist)  # Best at the center (reward approaches 1), drops off quickly
 
         return obs, reward, terminated, truncated, info
 
@@ -238,7 +243,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
             self.data.act[:] = None
         mujoco.mj_forward(self.model, self.data)
 
-def close(self):
+    def close(self):
         """
         Clean up the temporary XML file created for this environment instance.
         Always call this method when the environment is no longer needed to avoid
@@ -251,25 +256,29 @@ def close(self):
 
 if __name__ == "__main__":
     import os
-    from sbx import SAC, PPO
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from sbx import SAC
     from utils import EvalProgressGifCallback
-    import numpy as np
     from gymnasium.wrappers import TimeLimit
     from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 
-    # Create output directory for logs and results
-    save_dir = "./exp_results"
-    os.makedirs(save_dir, exist_ok=True)
+    # Set the main output directory
+    main_save_dir = "./exp_compare_length"
+    os.makedirs(main_save_dir, exist_ok=True)
 
-    # Common environment arguments
+    # Experiment pole lengths and algorithm settings
+    pole_lengths = [1.0, 2.0, 3.0]
+    algorithms = [("SAC", SAC, 125_000), ]
+    num_runs = 5
+
+    # Shared environment configuration
     common_kwargs = dict(
-        length=1.5,
-        pole_density=1500,
-        cart_density=600,
+        pole_density=1000,
+        cart_density=1000,
         xml_file="./assets/inverted_pendulum.xml"
     )
 
-    # List of settings for train/eval/gif envs, with only what changes
     env_configs = {
         "train": dict(
             n_states=20,
@@ -282,7 +291,7 @@ if __name__ == "__main__":
             init_dist="uniform",
             sample_mode="random",
             dense_reward=True,
-            seed=42,
+            seed=None,
             render_mode=None,
         ),
         "eval": dict(
@@ -314,91 +323,135 @@ if __name__ == "__main__":
             render_mode="rgb_array"
         )
     }
-
     max_steps = 250
     n_envs = 10
 
-    # Generic environment factory
-    def make_env(env_type):
-        """Create an environment by type ('train', 'eval', 'gif')."""
-        kwargs = {**common_kwargs, **env_configs[env_type]}
+    def make_env(env_type, length):
+        """
+        Utility to instantiate an environment for a given type and pole length.
+        """
+        kwargs = {**common_kwargs, "length": length, **env_configs[env_type]}
         env = CustomInvertedPendulum(**kwargs)
         env = TimeLimit(env, max_episode_steps=max_steps)
         return env
 
-    train_env = SubprocVecEnv([lambda: make_env("train")] * n_envs)
-    eval_env = DummyVecEnv([lambda: make_env("eval")])
-    gif_env = DummyVecEnv([lambda: make_env("gif")])
 
-    total_timesteps = 75_000
-    eval_interval = total_timesteps // 25
-    eval_episodes = env_configs["eval"]["n_states"]
-    optimal_score = max_steps * 0.95  # Max episode steps
+    # Store result file locations
+    all_result_csvs = []
 
-    # Prepare callback
-    callback = EvalProgressGifCallback(
-        name="pendulum_sac_test",
-        eval_env=eval_env,
-        eval_episodes=eval_episodes,
-        eval_interval=eval_interval,
-        save_dir=save_dir,
-        total_timesteps=total_timesteps,
-        optimal_score=optimal_score,
-        gif_env=gif_env,
-        gif_num_episodes=env_configs["gif"]["n_states"],
-        verbose=1,
-    )
+    # Run experiments for each pole length and repetition (SAC only)
+    for length in pole_lengths:
+        print(f"\n=== Experiment for Pole Length: {length} ===\n")
+        for algo_name, algo_class, total_timesteps in algorithms:
+            for run_id in range(1, num_runs + 1):
+                print(f"[{algo_name}] Length={length}, Run {run_id}/{num_runs}")
+                save_dir = os.path.join(main_save_dir, f"{algo_name}_Length{length}_Run{run_id}")
+                os.makedirs(save_dir, exist_ok=True)
+                exp_name = f"{algo_name}_Length{length}_Run{run_id}"
 
-    # Create model
-    model = SAC(
-        "MlpPolicy",
-        train_env,
-        learning_rate=1e-4,
-        buffer_size=total_timesteps // 10,
-        batch_size=1000,
-        train_freq=n_envs,
-        gradient_steps=n_envs,
-        learning_starts=1000,
-        verbose=0,
-        tensorboard_log=os.path.join(save_dir, "tb"),
-    )
+                train_env = SubprocVecEnv([lambda: make_env("train", length)] * n_envs)
+                eval_env = DummyVecEnv([lambda: make_env("eval", length)])
+                gif_env = DummyVecEnv([lambda: make_env("gif", length)])
 
-    # Train model
-    model.learn(
-        total_timesteps=total_timesteps,
-        callback=callback,
-    )
+                eval_episodes = env_configs["eval"]["n_states"]
+                eval_interval = total_timesteps // 25
+                optimal_score = max_steps * 0.8
 
-    total_timesteps = 150_000
-    eval_interval = total_timesteps // 25
-    eval_episodes = env_configs["eval"]["n_states"]
-    optimal_score = max_steps * 0.95  # Max episode steps
+                callback = EvalProgressGifCallback(
+                    name=exp_name,
+                    eval_env=eval_env,
+                    eval_episodes=eval_episodes,
+                    eval_interval=eval_interval,
+                    save_dir=save_dir,
+                    total_timesteps=total_timesteps,
+                    optimal_score=optimal_score,
+                    gif_env=gif_env,
+                    gif_num_episodes=env_configs["gif"]["n_states"],
+                    verbose=1,
+                )
 
-    # Prepare callback
-    callback = EvalProgressGifCallback(
-        name="pendulum_ppo_test",
-        eval_env=eval_env,
-        eval_episodes=eval_episodes,
-        eval_interval=eval_interval,
-        save_dir=save_dir,
-        total_timesteps=total_timesteps,
-        optimal_score=optimal_score,
-        gif_env=gif_env,
-        gif_num_episodes=env_configs["gif"]["n_states"],
-        verbose=1,
-    )
+                model = algo_class(
+                    "MlpPolicy",
+                    train_env,
+                    learning_rate=1e-4,
+                    buffer_size=total_timesteps // 10,
+                    batch_size=1000,
+                    train_freq=n_envs,
+                    gradient_steps=n_envs,
+                    learning_starts=1000,
+                    verbose=0,
+                    tensorboard_log=os.path.join(save_dir, "tb"),
+                )
 
-    # Create model
-    model = PPO(
-        "MlpPolicy",
-        train_env,
-        learning_rate=1e-4,
-        verbose=0,
-        tensorboard_log=os.path.join(save_dir, "tb"),
-    )
+                # Start training for one run
+                model.learn(
+                    total_timesteps=total_timesteps,
+                    callback=callback,
+                )
+                csv_path = os.path.join(save_dir, f"{exp_name}_result.csv")
+                all_result_csvs.append({
+                    "algo": algo_name,
+                    "length": length,
+                    "run": run_id,
+                    "csv": csv_path,
+                    "curve_img": os.path.join(save_dir, f"{exp_name}_curve.png"),
+                })
 
-    # Train model
-    model.learn(
-        total_timesteps=total_timesteps,
-        callback=callback,
-    )
+    # ======================= Merge and Plot Comparative Curves ========================
+    # Aggregate all results into a single DataFrame
+    all_dfs = []
+    for info in all_result_csvs:
+        df = pd.read_csv(info["csv"])
+        df["algorithm"] = info["algo"]
+        df["length"] = info["length"]
+        df["run"] = info["run"]
+        all_dfs.append(df)
+    all_df = pd.concat(all_dfs, ignore_index=True)
+
+    # First plot: raw average reward curve
+    plt.figure(figsize=(10, 6))
+    for length in pole_lengths:
+        sub = all_df[(all_df["length"] == length)]
+        grouped = sub.groupby("timesteps").agg({"mean_reward": ["mean", "std"]}).reset_index()
+        plt.plot(grouped["timesteps"], grouped["mean_reward"]["mean"],
+                 label=f"SAC length={length}")
+        plt.fill_between(
+            grouped["timesteps"],
+            grouped["mean_reward"]["mean"] - grouped["mean_reward"]["std"],
+            grouped["mean_reward"]["mean"] + grouped["mean_reward"]["std"],
+            alpha=0.2)
+    plt.xlabel("Timesteps")
+    plt.ylabel("Mean Reward")
+    plt.title("SAC: Comparison for Different Pole Lengths (Averaged, ±STD)")
+    plt.legend()
+    plt.grid(True)
+    save_path = os.path.join(main_save_dir, "compare_lengths_raw.png")
+    plt.savefig(save_path)
+    plt.show()
+    print(f"Raw comparison figure saved to: {save_path}")
+
+    # Second plot: independently normalised (each curve divided by its own maximum)
+    plt.figure(figsize=(10, 6))
+    for length in pole_lengths:
+        sub = all_df[(all_df["length"] == length)]
+        grouped = sub.groupby("timesteps").agg({"mean_reward": ["mean", "std"]}).reset_index()
+        # Each curve uses its max for normalisation
+        local_max = grouped["mean_reward"]["mean"].max()
+        norm_mean = grouped["mean_reward"]["mean"] / local_max
+        norm_std = grouped["mean_reward"]["std"] / local_max
+        plt.plot(grouped["timesteps"], norm_mean,
+                 label=f"SAC length={length}")
+        plt.fill_between(
+            grouped["timesteps"],
+            norm_mean - norm_std,
+            norm_mean + norm_std,
+            alpha=0.2)
+    plt.xlabel("Timesteps")
+    plt.ylabel("Normalised Mean Reward (per curve)")
+    plt.title("SAC: Curve-wise Normalised Comparison (Averaged, ±STD)")
+    plt.legend()
+    plt.grid(True)
+    norm_path = os.path.join(main_save_dir, "compare_lengths_curvewise_normalised.png")
+    plt.savefig(norm_path)
+    plt.show()
+    print(f"Curve-wise normalised comparison figure saved to: {norm_path}")
