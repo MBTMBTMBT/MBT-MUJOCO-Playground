@@ -28,7 +28,6 @@ class EvalProgressGifCallback(BaseCallback):
         gif_env=None,
         gif_num_episodes=8,
         verbose=1,
-        temp_dir=".",
     ):
         super().__init__(verbose)
         self.name = name
@@ -40,7 +39,6 @@ class EvalProgressGifCallback(BaseCallback):
         self.gif_num_episodes = gif_num_episodes
         self.eval_episodes = eval_episodes
 
-        self.temp_dir = temp_dir
         self.best_mean_reward = -np.inf
         self.step_reached_optimal = None
         self.rewards = []

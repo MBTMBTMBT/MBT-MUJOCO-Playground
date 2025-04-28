@@ -1,7 +1,6 @@
 import os
 os.environ['MUJOCO_GL'] = 'egl'
 import mujoco
-from gymnasium.wrappers import TimeLimit
 from gymnasium.envs.mujoco.inverted_pendulum_v5 import InvertedPendulumEnv
 import tempfile
 import xml.etree.ElementTree as ET
@@ -252,7 +251,7 @@ def close(self):
 
 if __name__ == "__main__":
     import os
-    from stable_baselines3 import SAC
+    from stable_baselines3 import SAC, PPO
     from utils import EvalProgressGifCallback
     import numpy as np
     from gymnasium.wrappers import TimeLimit
@@ -316,7 +315,7 @@ if __name__ == "__main__":
         )
     }
 
-    max_steps = 500
+    max_steps = 250
     n_envs = 10
 
     # Generic environment factory
@@ -331,10 +330,10 @@ if __name__ == "__main__":
     eval_env = DummyVecEnv([lambda: make_env("eval")])
     gif_env = DummyVecEnv([lambda: make_env("gif")])
 
-    total_timesteps = 50_000
-    eval_interval = total_timesteps // 50
+    total_timesteps = 75_000
+    eval_interval = total_timesteps // 25
     eval_episodes = env_configs["eval"]["n_states"]
-    optimal_score = max_steps  # Max episode steps
+    optimal_score = max_steps * 0.9  # Max episode steps
 
     # Prepare callback
     callback = EvalProgressGifCallback(
@@ -356,10 +355,44 @@ if __name__ == "__main__":
         train_env,
         learning_rate=1e-4,
         buffer_size=total_timesteps // 10,
-        batch_size=500,
+        batch_size=1000,
         train_freq=n_envs,
         gradient_steps=n_envs,
-        learning_starts=500,
+        learning_starts=1000,
+        verbose=0,
+        tensorboard_log=os.path.join(save_dir, "tb"),
+    )
+
+    # Train model
+    model.learn(
+        total_timesteps=total_timesteps,
+        callback=callback,
+    )
+
+    total_timesteps = 250_000
+    eval_interval = total_timesteps // 25
+    eval_episodes = env_configs["eval"]["n_states"]
+    optimal_score = max_steps * 0.9  # Max episode steps
+
+    # Prepare callback
+    callback = EvalProgressGifCallback(
+        name="pendulum_ppo_test",
+        eval_env=eval_env,
+        eval_episodes=eval_episodes,
+        eval_interval=eval_interval,
+        save_dir=save_dir,
+        total_timesteps=total_timesteps,
+        optimal_score=optimal_score,
+        gif_env=gif_env,
+        gif_num_episodes=env_configs["gif"]["n_states"],
+        verbose=1,
+    )
+
+    # Create model
+    model = PPO(
+        "MlpPolicy",
+        train_env,
+        learning_rate=1e-4,
         verbose=0,
         tensorboard_log=os.path.join(save_dir, "tb"),
     )
