@@ -251,7 +251,7 @@ def close(self):
 
 if __name__ == "__main__":
     import os
-    from stable_baselines3 import SAC, PPO
+    from sbx import SAC, PPO
     from utils import EvalProgressGifCallback
     import numpy as np
     from gymnasium.wrappers import TimeLimit
