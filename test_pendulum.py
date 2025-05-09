@@ -15,7 +15,7 @@ if __name__ == "__main__":
     # Experiment pole lengths and algorithm settings
     pole_lengths = [1.0, 2.0, 3.0]
     algorithms = [
-        ("PPO", 450_000),
+        # ("PPO", 450_000),
         ("SAC", 150_000),
     ]
     num_runs = 1
