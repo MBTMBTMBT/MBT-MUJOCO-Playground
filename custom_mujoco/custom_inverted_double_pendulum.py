@@ -73,7 +73,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         init_ranges (list of tuple): Ranges [(low, high), ...] for each of the 6 initial state dimensions.
         init_mode (str): State sampling mode for environment resets: "random", "sequential", or "seeded".
         seed (int or None): Random seed for reproducible initial state generation.
-        dense_reward (bool): If True, uses a smooth exponential reward based on the pole tip's proximity to upright.
+        dense_reward (bool): If True, uses a smooth exponential reward based on the cart's distance from the center (x=0).
                              If False, uses the original reward structure with position and velocity penalties.
         **kwargs: Additional arguments forwarded to the base `InvertedDoublePendulumEnv`.
     """
@@ -101,7 +101,12 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         self._init_index = 0  # Index for sequential or seeded reset order
 
         self.dense_reward = dense_reward
+
+        # Used for dynamic termination based on the current maximum tip height
         self.max_tip_y = pole1_length + pole2_length
+        self.fail_threshold = (
+            self.max_tip_y - 0.2
+        )  # Fail if tip drops 20cm below the top
 
         # Modify the original XML file with updated pole lengths and densities
         modified_xml = modify_double_pendulum_xml(
@@ -191,14 +196,15 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         """
 
         if getattr(self, "dense_reward", False):
-            # Dense exponential reward based on vertical tip position
-            alpha = 7.0  # Controls sharpness
-            normalized_error = (self.max_tip_y - y) / self.max_tip_y
-            reward = np.exp(-alpha * normalized_error)
+            # Dense reward based on cart position relative to center (x=0)
+            cart_x = self.data.qpos[0]
+            alpha = 7.0  # Controls sharpness of reward drop-off
+            reward = np.exp(-alpha * abs(cart_x))
 
             reward_info = {
-                "dense_exponential_reward": reward,
-                "normalized_error": normalized_error,
+                "dense_cart_center_reward": reward,
+                "cart_x": cart_x,
+                "alpha": alpha,
             }
 
         else:
@@ -217,3 +223,20 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
             }
 
         return reward, reward_info
+
+    def step(self, action):
+        self.do_simulation(action, self.frame_skip)
+
+        # Get tip position from the site named "tip"
+        x, _, y = self.data.site_xpos[0]
+        observation = self._get_obs()
+
+        # Use adaptive termination threshold based on pole lengths
+        terminated = bool(y <= self.fail_threshold)
+        reward, reward_info = self._get_rew(x, y, terminated)
+
+        info = reward_info
+        if self.render_mode == "human":
+            self.render()
+
+        return observation, reward, terminated, False, info
