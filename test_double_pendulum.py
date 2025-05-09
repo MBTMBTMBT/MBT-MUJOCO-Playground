@@ -16,7 +16,7 @@ if __name__ == "__main__":
     total_length = 2.0
     algorithms = [
         # ("PPO", 1_000_000),
-        ("SAC", 250_000),
+        ("SAC", 300_000),
     ]
     num_runs = 1
 
