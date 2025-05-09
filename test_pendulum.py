@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-from sbx import SAC
+from sbx import SAC, PPO
 import gymnasium as gym
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 import custom_mujoco
@@ -15,7 +15,8 @@ if __name__ == "__main__":
     # Experiment pole lengths and algorithm settings
     pole_lengths = [1.0, 2.0, 3.0]
     algorithms = [
-        ("SAC", SAC, 150_000),
+        ("PPO", 450_000),
+        ("SAC", 150_000),
     ]
     num_runs = 1
 
@@ -91,7 +92,7 @@ if __name__ == "__main__":
     # Run experiments for each pole length and repetition (SAC only)
     for length in pole_lengths:
         print(f"\n=== Experiment for Pole Length: {length} ===\n")
-        for algo_name, algo_class, total_timesteps in algorithms:
+        for algo_name, total_timesteps in algorithms:
             for run_id in range(1, num_runs + 1):
                 print(f"[{algo_name}] Length={length}, Run {run_id}/{num_runs}")
                 save_dir = os.path.join(
@@ -121,18 +122,32 @@ if __name__ == "__main__":
                     verbose=1,
                 )
 
-                model = algo_class(
-                    "MlpPolicy",
-                    train_env,
-                    learning_rate=1e-4,
-                    buffer_size=total_timesteps // 10,
-                    batch_size=1000,
-                    train_freq=n_envs,
-                    gradient_steps=n_envs,
-                    learning_starts=1000,
-                    verbose=0,
-                    tensorboard_log=os.path.join(save_dir, "tb"),
-                )
+                if algo_name == "PPO":
+                    model = PPO(
+                        "MlpPolicy",
+                        train_env,
+                        learning_rate=1e-4,
+                        batch_size=1000,
+                        verbose=0,
+                        tensorboard_log=os.path.join(save_dir, "tb"),
+                    )
+
+                elif algo_name == "SAC":
+                    model = SAC(
+                        "MlpPolicy",
+                        train_env,
+                        learning_rate=1e-4,
+                        buffer_size=total_timesteps // 5,
+                        batch_size=1000,
+                        train_freq=n_envs,
+                        gradient_steps=n_envs,
+                        learning_starts=1000,
+                        verbose=0,
+                        tensorboard_log=os.path.join(save_dir, "tb"),
+                    )
+
+                else:
+                    model = None
 
                 # Start training for one run
                 model.learn(

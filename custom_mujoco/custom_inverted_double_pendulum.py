@@ -104,9 +104,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
 
         # Used for dynamic termination based on the current maximum tip height
         self.max_tip_y = pole1_length + pole2_length
-        self.fail_threshold = (
-            self.max_tip_y * (1 / 1.2)
-        )
+        self.fail_threshold = self.max_tip_y * (1 / 1.2)
 
         # Modify the original XML file with updated pole lengths and densities
         modified_xml = modify_double_pendulum_xml(
