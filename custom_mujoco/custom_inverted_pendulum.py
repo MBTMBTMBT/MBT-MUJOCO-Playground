@@ -1,5 +1,6 @@
 import os
-os.environ['MUJOCO_GL'] = 'egl'
+
+os.environ["MUJOCO_GL"] = "egl"
 import mujoco
 from gymnasium.envs.mujoco.inverted_pendulum_v5 import InvertedPendulumEnv
 import tempfile
@@ -100,13 +101,13 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
     """
 
     DEFAULT_INIT_RANGES = {
-        'cart_position': (-0.05, 0.05),
-        'cart_velocity': (-0.05, 0.05),
-        'pole_angle': (-0.05, 0.05),
-        'pole_ang_vel': (-0.05, 0.05)
+        "cart_position": (-0.05, 0.05),
+        "cart_velocity": (-0.05, 0.05),
+        "pole_angle": (-0.05, 0.05),
+        "pole_ang_vel": (-0.05, 0.05),
     }
 
-    STATE_KEYS = ['cart_position', 'cart_velocity', 'pole_angle', 'pole_ang_vel']
+    STATE_KEYS = ["cart_position", "cart_velocity", "pole_angle", "pole_ang_vel"]
 
     def __init__(
         self,
@@ -161,8 +162,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
                 )
             elif init_dist == "gaussian":
                 self.initial_states = np.clip(
-                    self._rng.normal(loc=0, scale=0.02, size=(n_states, 4)),
-                    lows, highs
+                    self._rng.normal(loc=0, scale=0.02, size=(n_states, 4)), lows, highs
                 )
             else:
                 raise ValueError(
@@ -196,8 +196,12 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
             state = self.initial_states[idx]
 
         # State order: [cart pos, cart vel, pole angle, pole ang vel]
-        qpos = np.array([state[0], state[2]], dtype=np.float64)   # Position-based components.
-        qvel = np.array([state[1], state[3]], dtype=np.float64)   # Velocity-based components.
+        qpos = np.array(
+            [state[0], state[2]], dtype=np.float64
+        )  # Position-based components.
+        qvel = np.array(
+            [state[1], state[3]], dtype=np.float64
+        )  # Velocity-based components.
         self.set_state(qpos, qvel)
         obs = self._get_obs()
         info = {}
@@ -222,24 +226,11 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
             # Exponential reward: closer to the center line, higher the reward at a much faster rate.
             # alpha > 0 adjusts the steepness, typical value in [3, 10]
             alpha = 7.0
-            reward = np.exp(-alpha * norm_dist)  # Best at the center (reward approaches 1), drops off quickly
+            reward = np.exp(
+                -alpha * norm_dist
+            )  # Best at the center (reward approaches 1), drops off quickly
 
         return obs, reward, terminated, truncated, info
-
-    def set_state(self, qpos, qvel):
-        """
-        Set the state of the MuJoCo simulator explicitly.
-
-        Args:
-            qpos (np.ndarray): Array representing the positional states.
-            qvel (np.ndarray): Array representing the velocity states.
-        """
-        assert qpos.shape == (self.model.nq,) and qvel.shape == (self.model.nv,)
-        self.data.qpos[:] = np.copy(qpos)
-        self.data.qvel[:] = np.copy(qvel)
-        if self.model.na == 0:
-            self.data.act[:] = None
-        mujoco.mj_forward(self.model, self.data)
 
     def close(self):
         """

@@ -102,7 +102,9 @@ class EvalProgressGifCallback(BaseCallback):
                 self.step_reached_optimal = self.num_timesteps
 
             # Update progress bar display
-            opt_text = f"{self.step_reached_optimal}" if self.step_reached_optimal else "--"
+            opt_text = (
+                f"{self.step_reached_optimal}" if self.step_reached_optimal else "--"
+            )
             self.pbar.set_postfix_str(
                 f"R:{mean_reward:.1f}±{std_reward:.1f} Opt:{opt_text}"
             )
@@ -123,7 +125,9 @@ class EvalProgressGifCallback(BaseCallback):
         log_path = os.path.join(self.save_dir, f"{self.name}_result.csv")
 
         # Save rewards to CSV
-        df = pd.DataFrame(self.rewards, columns=["timesteps", "mean_reward", "std_reward"])
+        df = pd.DataFrame(
+            self.rewards, columns=["timesteps", "mean_reward", "std_reward"]
+        )
         df.to_csv(log_path, index=False)
 
         print(f"[EvalCallback] Log saved to {log_path}")
@@ -142,7 +146,9 @@ class EvalProgressGifCallback(BaseCallback):
             alpha=0.3,
             label="Std Dev",
         )
-        plt.axhline(self.optimal_score, linestyle="--", color="red", label="Optimal Score")
+        plt.axhline(
+            self.optimal_score, linestyle="--", color="red", label="Optimal Score"
+        )
         plt.xlabel("Timesteps")
         plt.ylabel("Mean Reward")
         plt.title(f"Evaluation Results: {self.name}")
@@ -215,7 +221,7 @@ class ProgressBarCallback(BaseCallback):
             mininterval=5,
             maxinterval=25,
             smoothing=0.9,
-            dynamic_ncols=True
+            dynamic_ncols=True,
         )
         self._last_num_timesteps = 0
 

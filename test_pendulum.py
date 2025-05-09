@@ -14,7 +14,9 @@ if __name__ == "__main__":
 
     # Experiment pole lengths and algorithm settings
     pole_lengths = [1.0, 2.0, 3.0]
-    algorithms = [("SAC", SAC, 150_000), ]
+    algorithms = [
+        ("SAC", SAC, 150_000),
+    ]
     num_runs = 1
 
     # Shared environment configuration
@@ -27,10 +29,10 @@ if __name__ == "__main__":
         "train": dict(
             n_states=20,
             init_ranges={
-                'cart_position': (-0.25, 0.25),
-                'cart_velocity': (-0.1, 0.1),
-                'pole_angle': (-0.1, 0.1),
-                'pole_ang_vel': (-0.1, 0.1),
+                "cart_position": (-0.25, 0.25),
+                "cart_velocity": (-0.1, 0.1),
+                "pole_angle": (-0.1, 0.1),
+                "pole_ang_vel": (-0.1, 0.1),
             },
             init_dist="uniform",
             init_mode="random",
@@ -41,10 +43,10 @@ if __name__ == "__main__":
         "eval": dict(
             n_states=32,
             init_ranges={
-                'cart_position': (-0.25, 0.25),
-                'cart_velocity': (-0.1, 0.1),
-                'pole_angle': (-0.1, 0.1),
-                'pole_ang_vel': (-0.1, 0.1),
+                "cart_position": (-0.25, 0.25),
+                "cart_velocity": (-0.1, 0.1),
+                "pole_angle": (-0.1, 0.1),
+                "pole_ang_vel": (-0.1, 0.1),
             },
             init_dist="uniform",
             init_mode="sequential",
@@ -55,17 +57,17 @@ if __name__ == "__main__":
         "gif": dict(
             n_states=32,
             init_ranges={
-                'cart_position': (-0.25, 0.25),
-                'cart_velocity': (-0.1, 0.1),
-                'pole_angle': (-0.1, 0.1),
-                'pole_ang_vel': (-0.1, 0.1),
+                "cart_position": (-0.25, 0.25),
+                "cart_velocity": (-0.1, 0.1),
+                "pole_angle": (-0.1, 0.1),
+                "pole_ang_vel": (-0.1, 0.1),
             },
             init_dist="uniform",
             init_mode="sequential",
             dense_reward=True,
             seed=123,
-            render_mode="rgb_array"
-        )
+            render_mode="rgb_array",
+        ),
     }
     max_steps = 250
     n_envs = 10
@@ -74,10 +76,14 @@ if __name__ == "__main__":
         """
         Utility to instantiate an environment for a given type and pole length.
         """
-        kwargs = {**common_kwargs, "length": length, **env_configs[env_type], "max_episode_steps": max_steps,}
+        kwargs = {
+            **common_kwargs,
+            "length": length,
+            **env_configs[env_type],
+            "max_episode_steps": max_steps,
+        }
         env = gym.make("CustomInvertedPendulum", **kwargs)
         return env
-
 
     # Store result file locations
     all_result_csvs = []
@@ -88,7 +94,9 @@ if __name__ == "__main__":
         for algo_name, algo_class, total_timesteps in algorithms:
             for run_id in range(1, num_runs + 1):
                 print(f"[{algo_name}] Length={length}, Run {run_id}/{num_runs}")
-                save_dir = os.path.join(main_save_dir, f"{algo_name}_Length{length}_Run{run_id}")
+                save_dir = os.path.join(
+                    main_save_dir, f"{algo_name}_Length{length}_Run{run_id}"
+                )
                 os.makedirs(save_dir, exist_ok=True)
                 exp_name = f"{algo_name}_Length{length}_Run{run_id}"
 
@@ -132,13 +140,15 @@ if __name__ == "__main__":
                     callback=callback,
                 )
                 csv_path = os.path.join(save_dir, f"{exp_name}_result.csv")
-                all_result_csvs.append({
-                    "algo": algo_name,
-                    "length": length,
-                    "run": run_id,
-                    "csv": csv_path,
-                    "curve_img": os.path.join(save_dir, f"{exp_name}_curve.png"),
-                })
+                all_result_csvs.append(
+                    {
+                        "algo": algo_name,
+                        "length": length,
+                        "run": run_id,
+                        "csv": csv_path,
+                        "curve_img": os.path.join(save_dir, f"{exp_name}_curve.png"),
+                    }
+                )
 
     # ======================= Merge and Plot Comparative Curves ========================
     # Aggregate all results into a single DataFrame
@@ -155,14 +165,20 @@ if __name__ == "__main__":
     plt.figure(figsize=(10, 6))
     for length in pole_lengths:
         sub = all_df[(all_df["length"] == length)]
-        grouped = sub.groupby("timesteps").agg({"mean_reward": ["mean", "std"]}).reset_index()
-        plt.plot(grouped["timesteps"], grouped["mean_reward"]["mean"],
-                 label=f"SAC length={length}")
+        grouped = (
+            sub.groupby("timesteps").agg({"mean_reward": ["mean", "std"]}).reset_index()
+        )
+        plt.plot(
+            grouped["timesteps"],
+            grouped["mean_reward"]["mean"],
+            label=f"SAC length={length}",
+        )
         plt.fill_between(
             grouped["timesteps"],
             grouped["mean_reward"]["mean"] - grouped["mean_reward"]["std"],
             grouped["mean_reward"]["mean"] + grouped["mean_reward"]["std"],
-            alpha=0.2)
+            alpha=0.2,
+        )
     plt.xlabel("Timesteps")
     plt.ylabel("Mean Reward")
     plt.title("SAC: Comparison for Different Pole Lengths (Averaged, ±STD)")
@@ -177,18 +193,17 @@ if __name__ == "__main__":
     plt.figure(figsize=(10, 6))
     for length in pole_lengths:
         sub = all_df[(all_df["length"] == length)]
-        grouped = sub.groupby("timesteps").agg({"mean_reward": ["mean", "std"]}).reset_index()
+        grouped = (
+            sub.groupby("timesteps").agg({"mean_reward": ["mean", "std"]}).reset_index()
+        )
         # Each curve uses its max for normalisation
         local_max = grouped["mean_reward"]["mean"].max()
         norm_mean = grouped["mean_reward"]["mean"] / local_max
         norm_std = grouped["mean_reward"]["std"] / local_max
-        plt.plot(grouped["timesteps"], norm_mean,
-                 label=f"SAC length={length}")
+        plt.plot(grouped["timesteps"], norm_mean, label=f"SAC length={length}")
         plt.fill_between(
-            grouped["timesteps"],
-            norm_mean - norm_std,
-            norm_mean + norm_std,
-            alpha=0.2)
+            grouped["timesteps"], norm_mean - norm_std, norm_mean + norm_std, alpha=0.2
+        )
     plt.xlabel("Timesteps")
     plt.ylabel("Normalised Mean Reward (per curve)")
     plt.title("SAC: Curve-wise Normalised Comparison (Averaged, ±STD)")

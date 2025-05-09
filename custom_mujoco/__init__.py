@@ -13,7 +13,9 @@ register(
         "length": 0.6,
         "pole_density": 1000.0,
         "cart_density": 1000.0,
-        "xml_file": os.path.join(os.getcwd(), "./custom_mujoco/assets/inverted_pendulum.xml"),
+        "xml_file": os.path.join(
+            os.getcwd(), "./custom_mujoco/assets/inverted_pendulum.xml"
+        ),
         "initial_states": None,
         "init_dist": "uniform",
         "n_states": 100,
@@ -30,7 +32,9 @@ register(
     entry_point="custom_mujoco:CustomInvertedDoublePendulum",
     kwargs={
         "render_mode": None,
-        "xml_file": os.path.join(os.getcwd(), "./custom_mujoco/assets/inverted_double_pendulum.xml"),
+        "xml_file": os.path.join(
+            os.getcwd(), "./custom_mujoco/assets/inverted_double_pendulum.xml"
+        ),
         "pole1_length": 0.6,
         "pole2_length": 0.6,
         "pole1_density": 1000.0,

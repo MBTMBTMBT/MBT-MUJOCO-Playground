@@ -1,5 +1,6 @@
 import os
-os.environ['MUJOCO_GL'] = 'egl'
+
+os.environ["MUJOCO_GL"] = "egl"
 import mujoco
 from gymnasium.envs.mujoco.inverted_double_pendulum_v5 import InvertedDoublePendulumEnv
 import tempfile
@@ -31,6 +32,14 @@ def modify_double_pendulum_xml(
     cart = root.find(".//geom[@name='cart']")
     if cart is not None:
         cart.set("density", str(cart_density))
+
+    pole2_body = root.find(".//body[@name='pole2']")
+    if pole2_body is not None:
+        pole2_body.set("pos", f"0 0 {pole1_length}")
+
+    tip_site = root.find(".//site[@name='tip']")
+    if tip_site is not None:
+        tip_site.set("pos", f"0 0 {pole2_length}")
 
     tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xml", mode="w")
     tree.write(tmp_file.name)
@@ -84,7 +93,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         init_ranges=None,
         init_mode="random",
         seed=None,
-        **kwargs
+        **kwargs,
     ):
         # Initialize random number generator for reproducibility
         self._rng = np.random.default_rng(seed)
@@ -97,8 +106,10 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         # Modify the original XML file with updated pole lengths and densities
         modified_xml = modify_double_pendulum_xml(
             xml_file,
-            pole1_length, pole2_length,
-            pole1_density, pole2_density,
+            pole1_length,
+            pole2_length,
+            pole1_density,
+            pole2_density,
             cart_density,
         )
 
@@ -122,11 +133,12 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
                 )
             elif init_dist == "gaussian":
                 self.initial_states = np.clip(
-                    self._rng.normal(loc=0, scale=0.02, size=(n_states, 6)),
-                    lows, highs
+                    self._rng.normal(loc=0, scale=0.02, size=(n_states, 6)), lows, highs
                 )
             else:
-                raise ValueError("Unsupported init_dist: choose 'uniform' or 'gaussian'")
+                raise ValueError(
+                    "Unsupported init_dist: choose 'uniform' or 'gaussian'"
+                )
 
         # Step 3: Precompute reset index order for sequential or seeded modes
         if init_mode == "seeded":
@@ -155,8 +167,8 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         # Set qpos (positions) and qvel (velocities)
         qpos = self.init_qpos.copy()
         qvel = self.init_qvel.copy()
-        qpos[:3] = state[:3]   # [cart x, hinge1, hinge2]
-        qvel[:3] = state[3:]   # [cart vx, hinge1 v, hinge2 v]
+        qpos[:3] = state[:3]  # [cart x, hinge1, hinge2]
+        qvel[:3] = state[3:]  # [cart vx, hinge1 v, hinge2 v]
 
         self.set_state(qpos, qvel)
         return self._get_obs()
@@ -180,7 +192,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
 
         if getattr(self, "dense_reward", False):
             # Dense exponential reward based on vertical tip position
-            alpha = 6.0  # Controls sharpness
+            alpha = 7.0  # Controls sharpness
             normalized_error = (self.max_tip_y - y) / self.max_tip_y
             reward = np.exp(-alpha * normalized_error)
 
@@ -205,4 +217,3 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
             }
 
         return reward, reward_info
-
