@@ -105,8 +105,8 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         # Used for dynamic termination based on the current maximum tip height
         self.max_tip_y = pole1_length + pole2_length
         self.fail_threshold = (
-            self.max_tip_y - 0.2
-        )  # Fail if tip drops 20cm below the top
+            self.max_tip_y * (1 / 1.2)
+        )
 
         # Modify the original XML file with updated pole lengths and densities
         modified_xml = modify_double_pendulum_xml(
@@ -198,7 +198,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         if getattr(self, "dense_reward", False):
             # Dense reward based on cart position relative to center (x=0)
             cart_x = self.data.qpos[0]
-            alpha = 7.0  # Controls sharpness of reward drop-off
+            alpha = 5.0  # Controls sharpness of reward drop-off
             reward = np.exp(-alpha * abs(cart_x))
 
             reward_info = {

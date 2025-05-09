@@ -12,9 +12,9 @@ if __name__ == "__main__":
     os.makedirs(main_save_dir, exist_ok=True)
 
     # Vary the lower pole (pole1) length while keeping total length constant at 1.2
-    pole1_lengths = [0.3, 0.6, 0.9]
+    pole1_lengths = [0.9, 0.6, 0.3]
     total_length = 1.2
-    algorithms = [("SAC", SAC, 150_000)]
+    algorithms = [("SAC", SAC, 200_000)]
     num_runs = 1
 
     # Fixed environment parameters
@@ -117,7 +117,7 @@ if __name__ == "__main__":
                     "MlpPolicy",
                     train_env,
                     learning_rate=1e-4,
-                    buffer_size=total_timesteps // 10,
+                    buffer_size=total_timesteps // 5,
                     batch_size=1000,
                     train_freq=n_envs,
                     gradient_steps=n_envs,
