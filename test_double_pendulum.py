@@ -11,20 +11,20 @@ if __name__ == "__main__":
     main_save_dir = "./exp_compare_length_config_doublependulum"
     os.makedirs(main_save_dir, exist_ok=True)
 
-    # Vary the lower pole (pole1) length while keeping total length constant at 1.2
-    pole1_lengths = [1.0, 0.66, 0.33]
+    # Vary the lower pole (pole1) length while keeping total length constant
+    pole1_lengths = [1.0, 0.50, 0.25]
     total_length = 2.0
     algorithms = [
         # ("PPO", 1_000_000),
         ("SAC", 300_000),
     ]
-    num_runs = 1
+    num_runs = 20
 
     # Fixed environment parameters
     common_kwargs = dict(
-        pole1_density=1000.0,
-        pole2_density=1000.0,
-        cart_density=1000.0,
+        pole1_density=500.0,
+        pole2_density=2500.0,
+        cart_density=500.0,
     )
 
     # Shared evaluation configurations

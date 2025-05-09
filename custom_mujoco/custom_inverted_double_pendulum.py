@@ -196,7 +196,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         if getattr(self, "dense_reward", False):
             # Dense reward based on cart position relative to center (x=0)
             cart_x = self.data.qpos[0]
-            alpha = 3.0  # Controls sharpness of reward drop-off
+            alpha = 2.0  # Controls sharpness of reward drop-off
             reward = np.exp(-alpha * abs(cart_x))
 
             reward_info = {

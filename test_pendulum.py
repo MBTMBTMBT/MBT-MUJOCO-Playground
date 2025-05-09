@@ -18,7 +18,7 @@ if __name__ == "__main__":
         # ("PPO", 450_000),
         ("SAC", 150_000),
     ]
-    num_runs = 1
+    num_runs = 10
 
     # Shared environment configuration
     common_kwargs = dict(
