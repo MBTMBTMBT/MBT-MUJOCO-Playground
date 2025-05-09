@@ -15,7 +15,7 @@ if __name__ == "__main__":
     pole1_lengths = [0.9, 0.6, 0.3]
     total_length = 1.2
     algorithms = [
-        ("PPO", 750_000),
+        ("PPO", 1_000_000),
         ("SAC", 250_000),
     ]
     num_runs = 1
