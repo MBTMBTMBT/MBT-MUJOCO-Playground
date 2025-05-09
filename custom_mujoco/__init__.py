@@ -1,5 +1,6 @@
 import os
 from custom_mujoco.custom_inverted_pendulum import CustomInvertedPendulum
+from custom_mujoco.custom_inverted_double_pendulum import CustomInvertedDoublePendulum
 from custom_mujoco.utils import EvalProgressGifCallback
 from gymnasium.envs.registration import register
 
@@ -13,6 +14,28 @@ register(
         "pole_density": 1000.0,
         "cart_density": 1000.0,
         "xml_file": os.path.join(os.getcwd(), "./custom_mujoco/assets/inverted_pendulum.xml"),
+        "initial_states": None,
+        "init_dist": "uniform",
+        "n_states": 100,
+        "init_ranges": None,
+        "init_mode": "random",
+        "dense_reward": False,
+        "seed": None,
+    },
+    max_episode_steps=500,
+)
+
+register(
+    id="CustomInvertedDoublePendulum",
+    entry_point="custom_mujoco:CustomInvertedDoublePendulum",
+    kwargs={
+        "render_mode": None,
+        "xml_file": os.path.join(os.getcwd(), "./custom_mujoco/assets/inverted_double_pendulum.xml"),
+        "pole1_length": 0.6,
+        "pole2_length": 0.6,
+        "pole1_density": 1000.0,
+        "pole2_density": 1000.0,
+        "cart_density": 1000.0,
         "initial_states": None,
         "init_dist": "uniform",
         "n_states": 100,
