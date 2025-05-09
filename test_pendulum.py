@@ -127,7 +127,6 @@ if __name__ == "__main__":
                         "MlpPolicy",
                         train_env,
                         learning_rate=1e-4,
-                        batch_size=1000,
                         verbose=0,
                         tensorboard_log=os.path.join(save_dir, "tb"),
                     )
