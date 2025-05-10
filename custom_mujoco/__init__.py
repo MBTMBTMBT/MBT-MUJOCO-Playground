@@ -1,8 +1,20 @@
 import os
+import importlib.resources as pkg_resources
 from custom_mujoco.custom_inverted_pendulum import CustomInvertedPendulum
 from custom_mujoco.custom_inverted_double_pendulum import CustomInvertedDoublePendulum
 from custom_mujoco.utils import EvalProgressGifCallback
 from gymnasium.envs.registration import register
+
+
+def get_asset_path(filename):
+    """Get absolute path to an asset file."""
+    try:
+        # Python 3.9+
+        with pkg_resources.as_file(pkg_resources.files('custom_mujoco.assets') / filename) as path:
+            return str(path)
+    except (ImportError, AttributeError):
+        package_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(package_dir, 'assets', filename)
 
 
 register(
@@ -13,9 +25,7 @@ register(
         "length": 0.6,
         "pole_density": 1000.0,
         "cart_density": 1000.0,
-        "xml_file": os.path.join(
-            os.getcwd(), "./custom_mujoco/assets/inverted_pendulum.xml"
-        ),
+        "xml_file": get_asset_path("inverted_pendulum.xml"),
         "initial_states": None,
         "init_dist": "uniform",
         "n_states": 100,
@@ -32,9 +42,7 @@ register(
     entry_point="custom_mujoco:CustomInvertedDoublePendulum",
     kwargs={
         "render_mode": None,
-        "xml_file": os.path.join(
-            os.getcwd(), "./custom_mujoco/assets/inverted_double_pendulum.xml"
-        ),
+        "xml_file": get_asset_path("inverted_double_pendulum.xml"),
         "pole1_length": 0.6,
         "pole2_length": 0.6,
         "pole1_density": 1000.0,
