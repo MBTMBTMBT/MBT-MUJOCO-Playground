@@ -229,7 +229,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
 
             # Exponential reward: closer to the center line, higher the reward at a much faster rate.
             # alpha > 0 adjusts the steepness, typical value in [3, 10]
-            alpha = 7.0
+            alpha = 3.0
             reward = np.exp(
                 -alpha * norm_dist
             )  # Best at the center (reward approaches 1), drops off quickly
