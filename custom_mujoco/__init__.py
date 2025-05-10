@@ -1,4 +1,11 @@
 import os
+import platform
+if "microsoft" in platform.uname().release.lower():
+    # print("Using osmesa for rendering on WSL...")
+    os.environ["MUJOCO_GL"] = "osmesa"
+else:
+    # print("Using egl for rendering...")
+    os.environ["MUJOCO_GL"] = "egl"
 import importlib.resources as pkg_resources
 from custom_mujoco.custom_inverted_pendulum import CustomInvertedPendulum
 from custom_mujoco.custom_inverted_double_pendulum import CustomInvertedDoublePendulum

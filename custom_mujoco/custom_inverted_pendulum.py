@@ -1,6 +1,4 @@
 import os
-
-os.environ["MUJOCO_GL"] = "egl"
 import mujoco
 from gymnasium.envs.mujoco.inverted_pendulum_v5 import InvertedPendulumEnv
 import tempfile
