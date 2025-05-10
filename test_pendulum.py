@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     env_configs = {
         "train": dict(
-            n_states=20,
+            n_rand_initial_states=1024,
             init_ranges={
                 "cart_position": (-0.25, 0.25),
                 "cart_velocity": (-0.1, 0.1),
@@ -42,7 +42,7 @@ if __name__ == "__main__":
             render_mode=None,
         ),
         "eval": dict(
-            n_states=32,
+            n_rand_initial_states=32,
             init_ranges={
                 "cart_position": (-0.25, 0.25),
                 "cart_velocity": (-0.1, 0.1),
@@ -56,7 +56,7 @@ if __name__ == "__main__":
             render_mode=None,
         ),
         "gif": dict(
-            n_states=32,
+            n_rand_initial_states=32,
             init_ranges={
                 "cart_position": (-0.25, 0.25),
                 "cart_velocity": (-0.1, 0.1),
@@ -105,7 +105,7 @@ if __name__ == "__main__":
                 eval_env = DummyVecEnv([lambda: make_env("eval", length)])
                 gif_env = DummyVecEnv([lambda: make_env("gif", length)])
 
-                eval_episodes = env_configs["eval"]["n_states"]
+                eval_episodes = env_configs["eval"]["n_rand_initial_states"]
                 eval_interval = total_timesteps // 25
                 optimal_score = max_steps * 0.8
 
@@ -118,7 +118,7 @@ if __name__ == "__main__":
                     total_timesteps=total_timesteps,
                     optimal_score=optimal_score,
                     gif_env=gif_env,
-                    gif_num_episodes=env_configs["gif"]["n_states"],
+                    gif_num_episodes=env_configs["gif"]["n_rand_initial_states"],
                     verbose=1,
                 )
 

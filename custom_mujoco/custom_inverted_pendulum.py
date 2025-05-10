@@ -80,7 +80,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         xml_file (str): Path to the MuJoCo XML describing the inverted pendulum.
         initial_states (np.ndarray or None): If a numpy array/list is provided, use this finite set of states for environment reset.
         init_dist (str): Sampling distribution if `initial_states` is not provided, 'uniform' or 'gaussian' (default 'uniform').
-        n_states (int): The total number of initial states to generate (default 100).
+        n_rand_initial_states (int): The total number of initial states to generate (default 100).
         init_ranges (dict or None): Value range for each element of the state.
         init_mode (str): One of 'random', 'sequential', or 'seeded'. Determines the policy for selecting the next initial state at reset.
         seed (int or None): RNG seed for reproducibility if applicable.
@@ -117,7 +117,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         xml_file: str = "./custom_mujoco/assets/inverted_pendulum.xml",
         initial_states=None,
         init_dist: str = "uniform",
-        n_states: int = 100,
+        n_rand_initial_states: int = 100,
         init_ranges: dict = None,
         init_mode: str = "random",
         dense_reward: bool = False,
@@ -158,11 +158,11 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
             highs = np.array([self.init_ranges[key][1] for key in self.STATE_KEYS])
             if init_dist == "uniform":
                 self.initial_states = self._rng.uniform(
-                    low=lows, high=highs, size=(n_states, 4)
+                    low=lows, high=highs, size=(n_rand_initial_states, 4)
                 )
             elif init_dist == "gaussian":
                 self.initial_states = np.clip(
-                    self._rng.normal(loc=0, scale=0.02, size=(n_states, 4)), lows, highs
+                    self._rng.normal(loc=0, scale=0.02, size=(n_rand_initial_states, 4)), lows, highs
                 )
             else:
                 raise ValueError(

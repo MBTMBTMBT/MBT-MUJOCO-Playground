@@ -69,7 +69,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         initial_states (np.ndarray or None): Optional array of predefined initial states (shape: [n, 6]).
                                              If provided, overrides automatic sampling.
         init_dist (str): Sampling distribution to use if `initial_states` is not given. Options: "uniform", "gaussian".
-        n_states (int): Number of initial states to sample when using `init_dist`.
+        n_rand_initial_states (int): Number of initial states to sample when using `init_dist`.
         init_ranges (list of tuple): Ranges [(low, high), ...] for each of the 6 initial state dimensions.
         init_mode (str): State sampling mode for environment resets: "random", "sequential", or "seeded".
         seed (int or None): Random seed for reproducible initial state generation.
@@ -89,7 +89,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         dense_reward=False,
         initial_states=None,
         init_dist="uniform",
-        n_states=100,
+        n_rand_initial_states=100,
         init_ranges=None,
         init_mode="random",
         seed=None,
@@ -132,11 +132,11 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
             highs = np.array([r[1] for r in self.init_ranges])
             if init_dist == "uniform":
                 self.initial_states = self._rng.uniform(
-                    low=lows, high=highs, size=(n_states, 6)
+                    low=lows, high=highs, size=(n_rand_initial_states, 6)
                 )
             elif init_dist == "gaussian":
                 self.initial_states = np.clip(
-                    self._rng.normal(loc=0, scale=0.02, size=(n_states, 6)), lows, highs
+                    self._rng.normal(loc=0, scale=0.02, size=(n_rand_initial_states, 6)), lows, highs
                 )
             else:
                 raise ValueError(
