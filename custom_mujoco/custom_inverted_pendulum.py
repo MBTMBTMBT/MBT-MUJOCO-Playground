@@ -162,7 +162,11 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
                 )
             elif init_dist == "gaussian":
                 self.initial_states = np.clip(
-                    self._rng.normal(loc=0, scale=0.02, size=(n_rand_initial_states, 4)), lows, highs
+                    self._rng.normal(
+                        loc=0, scale=0.02, size=(n_rand_initial_states, 4)
+                    ),
+                    lows,
+                    highs,
                 )
             else:
                 raise ValueError(
