@@ -1,6 +1,7 @@
 import os
 from typing import Optional, List, Tuple
 
+import mujoco
 from gymnasium.envs.mujoco.humanoidstandup_v5 import HumanoidStandupEnv
 import tempfile
 import xml.etree.ElementTree as ET
@@ -149,11 +150,31 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
 
     def _get_rew(self, pos_after: float, action):
         if getattr(self, "dense_reward", False):
-            # Dense reward: based on head-to-height ratio
-            z_head = self.data.body_xpos[self.model.body_name2id("head")][2]
+            # Get the head's z position - handle API differences between mujoco versions
+            try:
+                # Modern MuJoCo Python API (≥2.3)
+                head_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "head")
+                if head_id >= 0:
+                    z_head = self.data.geom_xpos[head_id][2]
+                else:
+                    # Fallback - try to find head from named bodies
+                    body_names = [mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, i)
+                                  for i in range(self.model.nbody)]
+                    for i, name in enumerate(body_names):
+                        if name and 'head' in name.lower():
+                            z_head = self.data.xpos[i][2]
+                            break
+                    else:
+                        # If we couldn't find anything with 'head', use torso height as proxy
+                        torso_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "torso")
+                        z_head = self.data.xpos[torso_id][2]
+            except (ImportError, AttributeError):
+                # Legacy mujoco-py API
+                head_id = self.model.body_name2id("head")
+                z_head = self.data.body_xpos[head_id][2]
+            # Calculate reward based on head height
             z_ref = self.init_qpos[2]
             head_ratio = z_head / z_ref
-
             main_reward = head_ratio
             reward_info = {
                 "reward_head_ratio": head_ratio,

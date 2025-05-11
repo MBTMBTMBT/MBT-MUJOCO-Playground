@@ -63,8 +63,8 @@ register(
 )
 
 register(
-    id="CustomHumanoidStandup-v0",
-    entry_point="custom_humanoid_standup:CustomHumanoidStandup",
+    id="CustomHumanoidStandup",
+    entry_point="custom_mujoco:CustomHumanoidStandup",
     kwargs={
         "xml_file": get_asset_path("humanoidstandup.xml"),
         "top_heaviness": 1.0,              # Upper-body mass scaling
