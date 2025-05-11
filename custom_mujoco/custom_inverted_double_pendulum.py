@@ -1,4 +1,6 @@
 import os
+
+import mujoco
 from gymnasium.envs.mujoco.inverted_double_pendulum_v5 import InvertedDoublePendulumEnv
 import tempfile
 import xml.etree.ElementTree as ET
@@ -16,8 +18,8 @@ def modify_double_pendulum_xml(
     cart_density: float,
     hinge1_friction: float,
     hinge2_friction: float,
-    hinge1_stiffness: float,
-    hinge2_stiffness: float,
+    # hinge1_stiffness: float,
+    # hinge2_stiffness: float,
 ) -> str:
 
 
@@ -53,14 +55,14 @@ def modify_double_pendulum_xml(
     hinge = root.find(".//joint[@name='hinge']")
     if hinge is not None:
         hinge.set("damping", str(hinge1_friction))
-        hinge.set("stiffness", str(hinge1_stiffness))
-        hinge.set("ref", "0")
+        # hinge.set("springstiff", str(hinge1_stiffness))
+        # hinge.set("springref", "0")
 
     hinge2 = root.find(".//joint[@name='hinge2']")
     if hinge2 is not None:
         hinge2.set("damping", str(hinge2_friction))
-        hinge2.set("stiffness", str(hinge2_stiffness))
-        hinge2.set("ref", "0")
+        # hinge2.set("springstiff", str(hinge2_stiffness))
+        # hinge2.set("springref", "0")
 
     # Save the modified XML to a temporary file
     tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xml", mode="w")
@@ -158,8 +160,8 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
             cart_density=cart_density,
             hinge1_friction=hinge1_friction,
             hinge2_friction=hinge2_friction,
-            hinge1_stiffness=hinge1_stiffness,
-            hinge2_stiffness=hinge2_stiffness,
+            # hinge1_stiffness=hinge1_stiffness,
+            # hinge2_stiffness=hinge2_stiffness,
         )
 
         super().__init__(xml_file=modified_xml, **kwargs)
@@ -253,7 +255,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
 
             # Calculate height difference component
             tip_height_diff = abs(y - self.max_tip_y)
-            alpha_height = 2.0  # Controls sharpness of height reward drop-off
+            alpha_height = 5.0  # Controls sharpness of height reward drop-off
             height_reward = np.exp(-alpha_height * tip_height_diff)
 
             # Calculate cart center component
@@ -293,18 +295,46 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         return reward, reward_info
 
     def step(self, action):
-        self.do_simulation(action, self.frame_skip)
+        """Apply user action + linear spring torques, then step the simulator."""
 
-        # Get tip position from the site named "tip"
+        # ------------------------------------------------------------------
+        # 1) copy agent action
+        self.data.ctrl[:] = action
+
+        # ------------------------------------------------------------------
+        # 2) spring torques  τ = -kθ
+        theta1 = float(self.data.qpos[1])
+        theta2 = float(self.data.qpos[2])
+        tau1 = - self.hinge1_stiffness * theta1
+        tau2 = - self.hinge2_stiffness * theta2
+
+        # ------------------------------------------------------------------
+        # 3) clear previous applied forces
+        self.data.qfrc_applied.fill(0.0)
+
+        # get DOF indices via mj_name2id   (works for MuJoCo >=2.1, 3.x)
+        JOINT_OBJ = getattr(mujoco, "mjtObj_JOINT", 2)
+        jnt1 = mujoco.mj_name2id(self.model, JOINT_OBJ, "hinge")
+        jnt2 = mujoco.mj_name2id(self.model, JOINT_OBJ, "hinge2")
+        dof1 = int(self.model.jnt_dofadr[jnt1])
+        dof2 = int(self.model.jnt_dofadr[jnt2])
+
+        # inject spring torques
+        self.data.qfrc_applied[dof1] = tau1
+        self.data.qfrc_applied[dof2] = tau2
+
+        # ------------------------------------------------------------------
+        # 4) simulate
+        self.do_simulation(self.data.ctrl, self.frame_skip)
+
+        # ------------------------------------------------------------------
+        # 5) obs / reward / done
         x, _, y = self.data.site_xpos[0]
-        observation = self._get_obs()
+        obs = self._get_obs()
+        done = bool(y <= self.fail_threshold)
+        reward, info = self._get_rew(x, y, done)
 
-        # Use adaptive termination threshold based on pole lengths
-        terminated = bool(y <= self.fail_threshold)
-        reward, reward_info = self._get_rew(x, y, terminated)
-
-        info = reward_info
         if self.render_mode == "human":
             self.render()
 
-        return observation, reward, terminated, False, info
+        return obs, reward, done, False, info
