@@ -14,11 +14,17 @@ def modify_double_pendulum_xml(
     pole1_density: float,
     pole2_density: float,
     cart_density: float,
-    joint_friction: float,
+    hinge1_friction: float,
+    hinge2_friction: float,
+    hinge1_stiffness: float,
+    hinge2_stiffness: float,
 ) -> str:
+
+
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
+    # Modify geom lengths and densities
     cpole = root.find(".//geom[@name='cpole']")
     if cpole is not None:
         cpole.set("fromto", f"0 0 0 0 0 {pole1_length}")
@@ -33,19 +39,30 @@ def modify_double_pendulum_xml(
     if cart is not None:
         cart.set("density", str(cart_density))
 
-    # Add friction to the joint between the two poles
-    pole2_joint = root.find(".//joint[@name='hinge2']")
-    if pole2_joint is not None:
-        pole2_joint.set("damping", str(joint_friction))
-
+    # Adjust second pole position (to match new first pole length)
     pole2_body = root.find(".//body[@name='pole2']")
     if pole2_body is not None:
         pole2_body.set("pos", f"0 0 {pole1_length}")
 
+    # Adjust site tip to match pole2 length
     tip_site = root.find(".//site[@name='tip']")
     if tip_site is not None:
         tip_site.set("pos", f"0 0 {pole2_length}")
 
+    # Modify damping and stiffness for both joints
+    hinge = root.find(".//joint[@name='hinge']")
+    if hinge is not None:
+        hinge.set("damping", str(hinge1_friction))
+        hinge.set("stiffness", str(hinge1_stiffness))
+        hinge.set("ref", "0")
+
+    hinge2 = root.find(".//joint[@name='hinge2']")
+    if hinge2 is not None:
+        hinge2.set("damping", str(hinge2_friction))
+        hinge2.set("stiffness", str(hinge2_stiffness))
+        hinge2.set("ref", "0")
+
+    # Save the modified XML to a temporary file
     tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xml", mode="w")
     tree.write(tmp_file.name)
     tmp_file.close()
@@ -56,79 +73,97 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
     """
     A configurable extension of the InvertedDoublePendulum environment, supporting:
 
-    - Customizable physical properties, including pole lengths, densities, cart density, and joint friction.
-    - Fully controllable and reproducible initial state distributions.
-    - Flexible reset sampling modes: random, sequential, or deterministic (via seed).
-    - Optional dense reward mode that encourages proximity of the pole tip to its maximum height.
+    - Customizable physical properties:
+        - Independent control of pole lengths and densities.
+        - Adjustable cart body density.
+        - Tunable joint friction (viscous damping).
+        - Optional spring-like restoring forces at each joint via joint stiffness.
 
-    This environment is well-suited for curriculum learning, domain randomization,
-    and robustness evaluation under variable dynamics and controlled initialization.
+    - Flexible and reproducible initial state setup:
+        - Supports user-provided initial states or automatic sampling.
+        - Uniform or Gaussian distributions across configurable ranges.
+        - Reset modes include random, sequential, or deterministic via seed.
+
+    - Termination condition automatically adapts to the combined pole length,
+      ensuring consistency even under structural changes.
+
+    - Reward structure:
+        - Default (False): original Gym-style reward with survival bonus, distance penalty, and velocity penalty.
+        - Dense (True): exponential reward encouraging the cart to remain near the center (x ≈ 0).
+
+    This environment is ideal for curriculum learning, domain randomization,
+    robustness evaluation, and ablation studies involving physical structure variation.
 
     Args:
         xml_file (str): Path to the base MuJoCo XML model.
         pole1_length (float): Length (in meters) of the first pendulum segment.
         pole2_length (float): Length (in meters) of the second pendulum segment.
-        pole1_density (float): Density (kg/m³) of the first pendulum segment.
-        pole2_density (float): Density (kg/m³) of the second pendulum segment.
-        cart_density (float): Density (kg/m³) of the cart body.
-        joint_friction (float): Friction coefficient at the joint connecting the two pendulum segments.
-                                Controls the damping effect at the connection point. Default is 0.0 (no friction).
-        initial_states (np.ndarray or None): Optional array of predefined initial states (shape: [n, 6]).
-                                             If provided, overrides automatic sampling.
-        init_dist (str): Sampling distribution to use if `initial_states` is not given. Options: "uniform", "gaussian".
-        n_rand_initial_states (int): Number of initial states to sample when using `init_dist`.
-        init_ranges (list of tuple): Ranges [(low, high), ...] for each of the 6 initial state dimensions.
-        init_mode (str): State sampling mode for environment resets: "random", "sequential", or "seeded".
-        seed (int or None): Random seed for reproducible initial state generation.
-        dense_reward (bool): If True, uses a smooth exponential reward based on the cart's distance from the center (x=0).
-                             If False, uses the original reward structure with position and velocity penalties.
-        **kwargs: Additional arguments forwarded to the base `InvertedDoublePendulumEnv`.
+        pole1_density (float): Density (kg/m³) of the first pendulum.
+        pole2_density (float): Density (kg/m³) of the second pendulum.
+        cart_density (float): Density (kg/m³) of the cart.
+        hinge1_friction (float): Viscous damping at the first joint (cart ↔ pole1).
+        hinge2_friction (float): Viscous damping at the second joint (pole1 ↔ pole2).
+        hinge1_stiffness (float): Restoring spring stiffness (N·m/rad) for the first joint.
+        hinge2_stiffness (float): Restoring spring stiffness (N·m/rad) for the second joint.
+        dense_reward (bool): Whether to use dense reward based on cart position (exp(-|x|)). If False, use classic reward.
+        initial_states (np.ndarray or None): Optional fixed list of initial states (shape: [n, 6]).
+        init_dist (str): Distribution to sample initial states ("uniform" or "gaussian").
+        n_rand_initial_states (int): Number of samples to generate if no explicit initial_states are provided.
+        init_ranges (list of tuple): Ranges [(low, high), ...] for each state dimension.
+        init_mode (str): Mode for selecting initial states: "random", "sequential", or "seeded".
+        seed (int or None): Random seed to ensure reproducibility.
+        **kwargs: Additional keyword arguments passed to the base `InvertedDoublePendulumEnv`.
     """
 
     def __init__(
-            self,
-            xml_file: str = get_asset_path("inverted_double_pendulum.xml"),
-            pole1_length=0.6,
-            pole2_length=0.6,
-            pole1_density=1000.0,
-            pole2_density=1000.0,
-            cart_density=1000.0,
-            joint_friction=0.0,
-            dense_reward=False,
-            initial_states=None,
-            init_dist="uniform",
-            n_rand_initial_states=100,
-            init_ranges=None,
-            init_mode="random",
-            seed=None,
-            **kwargs,
+        self,
+        xml_file: str = get_asset_path("inverted_double_pendulum.xml"),
+        pole1_length: float = 0.6,
+        pole2_length: float = 0.6,
+        pole1_density: float = 1000.0,
+        pole2_density: float = 1000.0,
+        cart_density: float = 1000.0,
+        hinge1_friction: float = 0.0,
+        hinge2_friction: float = 0.0,
+        hinge1_stiffness: float = 0.0,
+        hinge2_stiffness: float = 0.0,
+        dense_reward: bool = False,
+        initial_states=None,
+        init_dist="uniform",
+        n_rand_initial_states=100,
+        init_ranges=None,
+        init_mode="random",
+        seed=None,
+        **kwargs,
     ):
-        # Initialize random number generator for reproducibility
         self._rng = np.random.default_rng(seed)
         self.sample_mode = init_mode
-        self._init_index = 0  # Index for sequential or seeded reset order
+        self._init_index = 0
 
         self.dense_reward = dense_reward
-        self.joint_friction = joint_friction  # Store the friction parameter
+        self.hinge1_friction = hinge1_friction
+        self.hinge2_friction = hinge2_friction
+        self.hinge1_stiffness = hinge1_stiffness
+        self.hinge2_stiffness = hinge2_stiffness
 
-        # Used for dynamic termination based on the current maximum tip height
         self.max_tip_y = pole1_length + pole2_length
-        self.fail_threshold = self.max_tip_y * (0.6 / 1.0)
+        self.fail_threshold = self.max_tip_y * 0.6  # Fail when tip drops 40% below top
 
-        # Modify the original XML file with updated pole lengths, densities, and friction
         modified_xml = modify_double_pendulum_xml(
-            xml_file,
-            pole1_length,
-            pole2_length,
-            pole1_density,
-            pole2_density,
-            cart_density,
-            joint_friction,
+            xml_path=xml_file,
+            pole1_length=pole1_length,
+            pole2_length=pole2_length,
+            pole1_density=pole1_density,
+            pole2_density=pole2_density,
+            cart_density=cart_density,
+            hinge1_friction=hinge1_friction,
+            hinge2_friction=hinge2_friction,
+            hinge1_stiffness=hinge1_stiffness,
+            hinge2_stiffness=hinge2_stiffness,
         )
 
-        # Initialize the parent environment with the modified XML
         super().__init__(xml_file=modified_xml, **kwargs)
-        self._temp_xml_path = modified_xml  # Save for later cleanup
+        self._temp_xml_path = modified_xml
 
         # Default state space ranges (position and velocity)
         self.init_ranges = init_ranges or [(-0.05, 0.05)] * 6
