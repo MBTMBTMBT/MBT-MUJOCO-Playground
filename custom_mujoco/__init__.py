@@ -57,6 +57,7 @@ register(
         "pole1_density": 1000.0,
         "pole2_density": 1000.0,
         "cart_density": 1000.0,
+        "joint_friction": 0.0,
         "initial_states": None,
         "init_dist": "uniform",
         "n_rand_initial_states": 100,
