@@ -242,8 +242,8 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
 
         # Control cost (same in both modes)
         # Adjust these weights to balance with main reward
-        ctrl_cost_weight = 0.01 if self.dense_reward else self._ctrl_cost_weight
-        impact_cost_weight = 0.01 if self.dense_reward else self._impact_cost_weight
+        ctrl_cost_weight = 0.01 * self._ctrl_cost_weight if self.dense_reward else self._ctrl_cost_weight
+        impact_cost_weight = 0.01 * self._impact_cost_weight if self.dense_reward else self._impact_cost_weight
 
         quad_ctrl_cost = ctrl_cost_weight * np.square(self.data.ctrl).sum()
 
