@@ -95,6 +95,10 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
         # Initialize parent environment with custom XML
         super().__init__(xml_file=modified_xml, **kwargs)
 
+        # Calculate reference heights for reward normalization
+        # This pre-computes the fully standing height for proper reward scaling
+        self._compute_reference_heights()
+
         # Record model state dimensions
         self.nq = self.model.nq
         self.nv = self.model.nv
@@ -130,6 +134,54 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
         else:
             self._index_order = None
 
+    def _compute_reference_heights(self):
+        """
+        Calculate reference heights for proper reward normalization:
+        - Standing height (maximum) using the "stand" keyframe
+        - Initial height (minimum) using current lying pose
+
+        This allows proper scaling of rewards between 0 (lying) and 1 (standing)
+        """
+        # Get head geom ID for position tracking
+        try:
+            self._head_gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "head")
+
+            # 1. Calculate standing height using the "stand" keyframe
+            stand_key_id = -1
+            for i in range(self.model.nkey):
+                key_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_KEY, i)
+                if key_name == "stand":
+                    stand_key_id = i
+                    break
+
+            if stand_key_id >= 0:
+                # Get the "stand" keyframe position
+                stand_qpos = self.model.key_qpos[stand_key_id].copy()
+
+                # Create temporary copy of data for simulation
+                tmp_data = mujoco.MjData(self.model)
+                tmp_data.qpos[:] = stand_qpos
+                mujoco.mj_forward(self.model, tmp_data)
+
+                # Store max head height when standing
+                self._head_z_max = float(tmp_data.geom_xpos[self._head_gid][2])
+            else:
+                # Fallback: estimate max height as 1.7m if keyframe not found
+                self._head_z_max = 1.7
+
+            # 2. Calculate minimum height from initial lying position
+            self._head_z_min = float(self.data.geom_xpos[self._head_gid][2])
+
+            # Print diagnostic info for debugging
+            # print(f"Head height reference: min={self._head_z_min:.3f}m, max={self._head_z_max:.3f}m")
+
+        except Exception as e:
+            # Fallback if anything goes wrong
+            print(f"Warning: Could not compute reference heights: {e}")
+            self._head_gid = -1
+            self._head_z_min = 0.1  # Approximate height when lying
+            self._head_z_max = 1.7  # Approximate height when standing
+
     def reset_model(self):
         if self.sample_mode in ("sequential", "seeded"):
             idx = self._index_order[self._init_index]
@@ -153,31 +205,32 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
             # Get the head's z position - handle API differences between mujoco versions
             try:
                 # Modern MuJoCo Python API (≥2.3)
-                head_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "head")
-                if head_id >= 0:
-                    z_head = self.data.geom_xpos[head_id][2]
+                if self._head_gid >= 0:
+                    z_head = self.data.geom_xpos[self._head_gid][2]
                 else:
                     # Fallback - try to find head from named bodies
-                    body_names = [mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, i)
-                                  for i in range(self.model.nbody)]
-                    for i, name in enumerate(body_names):
-                        if name and 'head' in name.lower():
-                            z_head = self.data.xpos[i][2]
-                            break
-                    else:
-                        # If we couldn't find anything with 'head', use torso height as proxy
-                        torso_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "torso")
-                        z_head = self.data.xpos[torso_id][2]
+                    torso_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "torso")
+                    z_head = self.data.xpos[torso_id][2]
             except (ImportError, AttributeError):
                 # Legacy mujoco-py API
                 head_id = self.model.body_name2id("head")
                 z_head = self.data.body_xpos[head_id][2]
-            # Calculate reward based on head height
-            z_ref = self.init_qpos[2]
-            head_ratio = z_head / z_ref
-            main_reward = head_ratio
+
+            # Calculate normalized reward based on head height (0.0 = lying, 1.0 = standing)
+            # Allow rewards > 1.0 if head goes higher than reference standing height
+            head_ratio = (z_head - self._head_z_min) / (self._head_z_max - self._head_z_min)
+
+            # Scale factor to make the main reward comparable to cost terms
+            # Typical control/impact costs are ~0.01-0.1, so we scale main reward down
+            reward_scale = 0.1
+            main_reward = head_ratio * reward_scale
+
             reward_info = {
                 "reward_head_ratio": head_ratio,
+                "reward_scaled": main_reward,
+                "head_height": z_head,
+                "min_height": self._head_z_min,
+                "max_height": self._head_z_max,
             }
         else:
             # Original reward: torso lifting rate
@@ -188,10 +241,14 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
             }
 
         # Control cost (same in both modes)
-        quad_ctrl_cost = self._ctrl_cost_weight * np.square(self.data.ctrl).sum()
+        # Adjust these weights to balance with main reward
+        ctrl_cost_weight = 0.01 if self.dense_reward else self._ctrl_cost_weight
+        impact_cost_weight = 0.01 if self.dense_reward else self._impact_cost_weight
+
+        quad_ctrl_cost = ctrl_cost_weight * np.square(self.data.ctrl).sum()
 
         # Impact cost (same in both modes)
-        quad_impact_cost = self._impact_cost_weight * np.square(self.data.cfrc_ext).sum()
+        quad_impact_cost = impact_cost_weight * np.square(self.data.cfrc_ext).sum()
         min_impact_cost, max_impact_cost = self._impact_cost_range
         quad_impact_cost = np.clip(quad_impact_cost, min_impact_cost, max_impact_cost)
 
