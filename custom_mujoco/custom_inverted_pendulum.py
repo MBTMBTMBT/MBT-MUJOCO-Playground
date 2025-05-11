@@ -5,6 +5,8 @@ import tempfile
 import xml.etree.ElementTree as ET
 import numpy as np
 
+from custom_mujoco import get_asset_path
+
 
 def modify_inverted_pendulum_xml(
     xml_file: str,
@@ -112,7 +114,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         length: float = 0.6,
         pole_density: float = 1000.0,
         cart_density: float = 1000.0,
-        xml_file: str = "./custom_mujoco/assets/inverted_pendulum.xml",
+        xml_file: str = get_asset_path("inverted_pendulum.xml"),
         initial_states=None,
         init_dist: str = "uniform",
         n_rand_initial_states: int = 100,

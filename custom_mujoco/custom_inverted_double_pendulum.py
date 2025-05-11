@@ -1,9 +1,10 @@
 import os
-import mujoco
 from gymnasium.envs.mujoco.inverted_double_pendulum_v5 import InvertedDoublePendulumEnv
 import tempfile
 import xml.etree.ElementTree as ET
 import numpy as np
+
+from custom_mujoco import get_asset_path
 
 
 def modify_double_pendulum_xml(
@@ -86,7 +87,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
 
     def __init__(
             self,
-            xml_file: str = "./custom_mujoco/assets/inverted_double_pendulum.xml",
+            xml_file: str = get_asset_path("inverted_double_pendulum.xml"),
             pole1_length=0.6,
             pole2_length=0.6,
             pole1_density=1000.0,
@@ -207,15 +208,36 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         """
 
         if getattr(self, "dense_reward", False):
-            # Dense reward based on cart position relative to center (x=0)
-            cart_x = self.data.qpos[0]
-            alpha = 2.0  # Controls sharpness of reward drop-off
-            reward = np.exp(-alpha * abs(cart_x))
+            # Dense reward combining two objectives:
+            # 1. Tip proximity to maximum height (50%)
+            # 2. Cart proximity to center point (50%)
+
+            # Get tip position and cart position
+            _, _, y = self.data.site_xpos[0]  # Tip vertical position
+            cart_x = self.data.qpos[0]  # Cart horizontal position
+
+            # Calculate height difference component
+            tip_height_diff = abs(y - self.max_tip_y)
+            alpha_height = 2.0  # Controls sharpness of height reward drop-off
+            height_reward = np.exp(-alpha_height * tip_height_diff)
+
+            # Calculate cart center component
+            alpha_cart = 1.0  # Controls sharpness of cart position reward drop-off
+            cart_reward = np.exp(-alpha_cart * abs(cart_x))
+
+            # Combine rewards with equal weights (50% each)
+            reward = 0.9 * height_reward + 0.1 * cart_reward
 
             reward_info = {
-                "dense_cart_center_reward": reward,
+                "combined_dense_reward": reward,
+                "height_reward": height_reward,
+                "cart_reward": cart_reward,
+                "tip_height": y,
+                "max_height": self.max_tip_y,
+                "height_diff": tip_height_diff,
                 "cart_x": cart_x,
-                "alpha": alpha,
+                "alpha_height": alpha_height,
+                "alpha_cart": alpha_cart,
             }
 
         else:
