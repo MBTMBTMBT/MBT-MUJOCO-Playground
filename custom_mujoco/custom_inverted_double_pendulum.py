@@ -22,7 +22,6 @@ def modify_double_pendulum_xml(
     # hinge2_stiffness: float,
 ) -> str:
 
-
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
@@ -111,7 +110,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         initial_states (np.ndarray or None): Optional fixed list of initial states (shape: [n, 6]).
         init_dist (str): Distribution to sample initial states ("uniform" or "gaussian").
         n_rand_initial_states (int): Number of samples to generate if no explicit initial_states are provided.
-        init_ranges (list of tuple): Ranges [(low, high), ...] for each state dimension.
+        init_ranges (list of tuple): Ranges [(low, high), ...] for each state dimension, in order [cart position, pole1 angle, pole2 angle, cart velocity, pole1 angular velocity, pole2 angular velocity]. Defaults to [(-0.01, 0.01)] * 6 if None.
         init_mode (str): Mode for selecting initial states: "random", "sequential", or "seeded".
         seed (int or None): Random seed to ensure reproducibility.
         **kwargs: Additional keyword arguments passed to the base `InvertedDoublePendulumEnv`.
@@ -149,7 +148,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         self.hinge2_stiffness = hinge2_stiffness
 
         self.max_tip_y = pole1_length + pole2_length
-        self.fail_threshold = self.max_tip_y * 0.6  # Fail when tip drops 40% below top
+        self.fail_threshold = self.max_tip_y * 0.5  # Fail when tip drops 50% below top
 
         modified_xml = modify_double_pendulum_xml(
             xml_path=xml_file,
@@ -168,7 +167,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         self._temp_xml_path = modified_xml
 
         # Default state space ranges (position and velocity)
-        self.init_ranges = init_ranges or [(-0.05, 0.05)] * 6
+        self.init_ranges = init_ranges or [(-0.01, 0.01)] * 6
 
         # Step 1: Use explicitly provided initial_states if available
         if initial_states is not None:
@@ -305,8 +304,8 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         # 2) spring torques  τ = -kθ
         theta1 = float(self.data.qpos[1])
         theta2 = float(self.data.qpos[2])
-        tau1 = - self.hinge1_stiffness * theta1
-        tau2 = - self.hinge2_stiffness * theta2
+        tau1 = -self.hinge1_stiffness * theta1
+        tau2 = -self.hinge2_stiffness * theta2
 
         # ------------------------------------------------------------------
         # 3) clear previous applied forces

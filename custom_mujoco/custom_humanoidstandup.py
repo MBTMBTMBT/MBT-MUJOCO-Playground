@@ -71,7 +71,7 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
             initial_states (np.ndarray or None): Predefined initial states of shape [n, nq + nv].
             init_dist (str): Distribution type for sampling initial states ("uniform" or "gaussian").
             n_rand_initial_states (int): Number of random initial states to sample.
-            init_ranges (list of tuple): Ranges [(low, high), ...] for each initial state dimension.
+            init_ranges (list of tuple): Ranges [(low, high), ...] for each state dimension, covering all position and velocity components of the humanoid. For this environment, the state has nq=78 position dimensions and nv=67 velocity dimensions, for a total of 145 dimensions. Each tuple specifies the allowed range for random sampling of the corresponding state variable. Defaults to [(-0.02, 0.02)] * 145 if None.
             init_mode (str): State sampling mode: "random", "sequential", or "seeded".
             seed (int or None): Random seed for reproducibility.
             **kwargs: Additional keyword arguments forwarded to HumanoidStandupEnv.
@@ -119,13 +119,17 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
             elif init_dist == "gaussian":
                 self.initial_states = np.clip(
                     self._rng.normal(
-                        loc=0.0, scale=0.5 * (highs - lows), size=(n_rand_initial_states, self._state_dim)
+                        loc=0.0,
+                        scale=0.5 * (highs - lows),
+                        size=(n_rand_initial_states, self._state_dim),
                     ),
                     lows,
                     highs,
                 )
             else:
-                raise ValueError("Unsupported init_dist: choose 'uniform' or 'gaussian'")
+                raise ValueError(
+                    "Unsupported init_dist: choose 'uniform' or 'gaussian'"
+                )
 
         if init_mode == "seeded":
             self._index_order = self._rng.permutation(len(self.initial_states))
@@ -144,7 +148,9 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
         """
         # Get head geom ID for position tracking
         try:
-            self._head_gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "head")
+            self._head_gid = mujoco.mj_name2id(
+                self.model, mujoco.mjtObj.mjOBJ_GEOM, "head"
+            )
 
             # 1. Calculate standing height using the "stand" keyframe
             stand_key_id = -1
@@ -190,8 +196,8 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
         else:
             state = self.initial_states[self._rng.integers(len(self.initial_states))]
 
-        qpos = self.init_qpos + state[:self.nq]
-        qvel = self.init_qvel + state[self.nq:]
+        qpos = self.init_qpos + state[: self.nq]
+        qvel = self.init_qvel + state[self.nq :]
         self.set_state(qpos, qvel)
         return self._get_obs()
 
@@ -209,7 +215,9 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
                     z_head = self.data.geom_xpos[self._head_gid][2]
                 else:
                     # Fallback - try to find head from named bodies
-                    torso_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "torso")
+                    torso_id = mujoco.mj_name2id(
+                        self.model, mujoco.mjtObj.mjOBJ_BODY, "torso"
+                    )
                     z_head = self.data.xpos[torso_id][2]
             except (ImportError, AttributeError):
                 # Legacy mujoco-py API
@@ -218,7 +226,9 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
 
             # Calculate normalized reward based on head height (0.0 = lying, 1.0 = standing)
             # Allow rewards > 1.0 if head goes higher than reference standing height
-            head_ratio = (z_head - self._head_z_min) / (self._head_z_max - self._head_z_min)
+            head_ratio = (z_head - self._head_z_min) / (
+                self._head_z_max - self._head_z_min
+            )
 
             # Scale factor to make the main reward comparable to cost terms
             # Typical control/impact costs are ~0.01-0.1, so we scale main reward down
@@ -242,8 +252,16 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
 
         # Control cost (same in both modes)
         # Adjust these weights to balance with main reward
-        ctrl_cost_weight = 0.01 * self._ctrl_cost_weight if self.dense_reward else self._ctrl_cost_weight
-        impact_cost_weight = 0.01 * self._impact_cost_weight if self.dense_reward else self._impact_cost_weight
+        ctrl_cost_weight = (
+            0.01 * self._ctrl_cost_weight
+            if self.dense_reward
+            else self._ctrl_cost_weight
+        )
+        impact_cost_weight = (
+            0.01 * self._impact_cost_weight
+            if self.dense_reward
+            else self._impact_cost_weight
+        )
 
         quad_ctrl_cost = ctrl_cost_weight * np.square(self.data.ctrl).sum()
 
@@ -251,7 +269,10 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
         quad_impact_cost = impact_cost_weight * np.square(self.data.cfrc_ext).sum()
         min_impact_cost, max_impact_cost = self._impact_cost_range
         if self.dense_reward:
-            min_impact_cost, max_impact_cost = 0.01 * min_impact_cost, 0.01 * max_impact_cost
+            min_impact_cost, max_impact_cost = (
+                0.01 * min_impact_cost,
+                0.01 * max_impact_cost,
+            )
         quad_impact_cost = np.clip(quad_impact_cost, min_impact_cost, max_impact_cost)
 
         # Total reward
@@ -261,9 +282,11 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
             pass
 
         # Add cost info to reward_info
-        reward_info.update({
-            "reward_quadctrl": -quad_ctrl_cost,
-            "reward_impact": -quad_impact_cost,
-        })
+        reward_info.update(
+            {
+                "reward_quadctrl": -quad_ctrl_cost,
+                "reward_impact": -quad_impact_cost,
+            }
+        )
 
         return reward, reward_info

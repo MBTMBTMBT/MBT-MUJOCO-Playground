@@ -67,15 +67,15 @@ register(
     entry_point="custom_mujoco:CustomHumanoidStandup",
     kwargs={
         "xml_file": get_asset_path("humanoidstandup.xml"),
-        "top_heaviness": 1.0,              # Upper-body mass scaling
-        "floor_friction_scale": 1.0,       # Floor friction scaling
-        "dense_reward": False,             # Whether to use dense head-ratio reward
-        "initial_states": None,            # Predefined initial state set (optional)
-        "init_dist": "uniform",            # Distribution for state sampling
-        "n_rand_initial_states": 100,      # Number of samples if using random init
-        "init_ranges": None,               # Sampling range for state variables
-        "init_mode": "random",             # Mode: "random", "sequential", "seeded"
-        "seed": None,                      # RNG seed
+        "top_heaviness": 1.0,  # Upper-body mass scaling
+        "floor_friction_scale": 1.0,  # Floor friction scaling
+        "dense_reward": False,  # Whether to use dense head-ratio reward
+        "initial_states": None,  # Predefined initial state set (optional)
+        "init_dist": "uniform",  # Distribution for state sampling
+        "n_rand_initial_states": 100,  # Number of samples if using random init
+        "init_ranges": None,  # Sampling range for state variables
+        "init_mode": "random",  # Mode: "random", "sequential", "seeded"
+        "seed": None,  # RNG seed
     },
     max_episode_steps=1000,
 )

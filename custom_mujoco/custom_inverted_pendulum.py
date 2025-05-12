@@ -69,7 +69,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
     Key features:
     - Ability to modify the pendulum length, pole density, and cart density via XML patching at construction time.
     - Flexible initial state sampling: support for uniform or Gaussian distributions, or providing a user-defined finite set of initial states.
-    - Option to set a fixed number of sampled initial states (`n_states`), not just grid discretisation per state dimension.
+    - Option to set a fixed number of sampled initial states (`n_rand_initial_states`).
     - Ability to explicitly specify the value ranges for each initial state variable (`init_ranges`).
     - Multiple sampling policies for the reset order: purely random, sequential cycling, or pseudo-random deterministic cycling using a given seed.
 
@@ -78,11 +78,12 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         pole_density (float): Density (kg/m³) for the pendulum body.
         cart_density (float): Density (kg/m³) for the cart body.
         xml_file (str): Path to the MuJoCo XML describing the inverted pendulum.
-        initial_states (np.ndarray or None): If a numpy array/list is provided, use this finite set of states for environment reset.
+        initial_states (np.ndarray or None): If provided, use this finite set of states for environment reset.
         init_dist (str): Sampling distribution if `initial_states` is not provided, 'uniform' or 'gaussian' (default 'uniform').
         n_rand_initial_states (int): The total number of initial states to generate (default 100).
-        init_ranges (dict or None): Value range for each element of the state.
+        init_ranges (list of tuple): Ranges [(low, high), ...] for each state dimension, in order [cart position, cart velocity, pole angle, pole angular velocity]. Defaults to [(-0.01, 0.01)] * 4 if None.
         init_mode (str): One of 'random', 'sequential', or 'seeded'. Determines the policy for selecting the next initial state at reset.
+        dense_reward (bool): Whether to use a dense reward function based on distance from center.
         seed (int or None): RNG seed for reproducibility if applicable.
         **kwargs: Any extra kwargs are passed to the superclass (InvertedPendulumEnv).
 
@@ -95,19 +96,9 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         - State is always specified in the order: [cart position, cart velocity, pole angle, pole angular velocity].
 
     Typical usage:
-        env = CustomInvertedPendulum(length=0.7, pole_density=1200, n_states=500,
-                                    init_ranges=[(-.1, .1)]*4, init_mode="sequential")
-
+        env = CustomInvertedPendulum(length=0.7, pole_density=1200, n_rand_initial_states=500,
+                                    init_ranges=[(-0.1, 0.1)]*4, init_mode="sequential")
     """
-
-    DEFAULT_INIT_RANGES = {
-        "cart_position": (-0.05, 0.05),
-        "cart_velocity": (-0.05, 0.05),
-        "pole_angle": (-0.05, 0.05),
-        "pole_ang_vel": (-0.05, 0.05),
-    }
-
-    STATE_KEYS = ["cart_position", "cart_velocity", "pole_angle", "pole_ang_vel"]
 
     def __init__(
         self,
@@ -118,7 +109,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         initial_states=None,
         init_dist: str = "uniform",
         n_rand_initial_states: int = 100,
-        init_ranges: dict = None,
+        init_ranges: list = None,
         init_mode: str = "random",
         dense_reward: bool = False,
         seed: int = None,
@@ -140,22 +131,16 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         self.sample_mode = init_mode
         self._init_index = 0  # Used for sequential and seeded sampling.
 
-        # Use supplied state set if provided, otherwise sample finite set as requested.
-        if init_ranges is None:
-            self.init_ranges = self.DEFAULT_INIT_RANGES.copy()
-        else:
-            self.init_ranges = self.DEFAULT_INIT_RANGES.copy()
-            for key in init_ranges:
-                if key in self.init_ranges:
-                    self.init_ranges[key] = init_ranges[key]
-                else:
-                    raise KeyError(f"Unknown state key: {key}")
+        # Default state space ranges (position and velocity)
+        self.init_ranges = init_ranges or [(-0.01, 0.01)] * 4
 
+        # Step 1: Use explicitly provided initial_states if available
         if initial_states is not None:
-            self.initial_states = np.asarray(initial_states)
+            self.initial_states = np.array(initial_states)
         else:
-            lows = np.array([self.init_ranges[key][0] for key in self.STATE_KEYS])
-            highs = np.array([self.init_ranges[key][1] for key in self.STATE_KEYS])
+            # Step 2: Otherwise sample based on distribution and range
+            lows = np.array([r[0] for r in self.init_ranges])
+            highs = np.array([r[1] for r in self.init_ranges])
             if init_dist == "uniform":
                 self.initial_states = self._rng.uniform(
                     low=lows, high=highs, size=(n_rand_initial_states, 4)
@@ -170,7 +155,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
                 )
             else:
                 raise ValueError(
-                    "Unsupported init_dist: choose 'uniform', 'gaussian' or provide initial_states."
+                    "Unsupported init_dist: choose 'uniform' or 'gaussian'"
                 )
 
         # Precompute the sampling order for non-random reset modes.
