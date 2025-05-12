@@ -250,11 +250,15 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
         # Impact cost (same in both modes)
         quad_impact_cost = impact_cost_weight * np.square(self.data.cfrc_ext).sum()
         min_impact_cost, max_impact_cost = self._impact_cost_range
-        quad_impact_cost = np.clip(quad_impact_cost, 0.01 * min_impact_cost, 0.01 * max_impact_cost)
+        if self.dense_reward:
+            min_impact_cost, max_impact_cost = 0.01 * min_impact_cost, 0.01 * max_impact_cost
+        quad_impact_cost = np.clip(quad_impact_cost, min_impact_cost, max_impact_cost)
 
         # Total reward
         reward = main_reward - quad_ctrl_cost - quad_impact_cost
-        reward *= 100
+        if self.dense_reward:
+            # reward *= 100
+            pass
 
         # Add cost info to reward_info
         reward_info.update({
