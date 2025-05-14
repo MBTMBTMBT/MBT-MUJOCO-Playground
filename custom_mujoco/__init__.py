@@ -26,6 +26,7 @@ register(
         "cart_density": 1000.0,
         "xml_file": get_asset_path("inverted_pendulum.xml"),
         "initial_states": None,
+        "initial_state_idxs": None,
         "init_dist": "uniform",
         "n_rand_initial_states": 100,
         "init_ranges": None,
@@ -52,6 +53,7 @@ register(
         "hinge1_stiffness": 0.0,
         "hinge2_stiffness": 0.0,
         "initial_states": None,
+        "initial_state_idxs": None,
         "init_dist": "uniform",
         "n_rand_initial_states": 100,
         "init_ranges": None,
@@ -71,11 +73,31 @@ register(
         "floor_friction_scale": 1.0,  # Floor friction scaling
         "dense_reward": False,  # Whether to use dense head-ratio reward
         "initial_states": None,  # Predefined initial state set (optional)
+        "initial_state_idxs": None,
         "init_dist": "uniform",  # Distribution for state sampling
         "n_rand_initial_states": 100,  # Number of samples if using random init
         "init_ranges": None,  # Sampling range for state variables
         "init_mode": "random",  # Mode: "random", "sequential", "seeded"
         "seed": None,  # RNG seed
+    },
+    max_episode_steps=1000,
+)
+
+register(
+    id="CustomHumanoid",
+    entry_point="custom_mujoco:CustomHumanoid",
+    kwargs={
+        "xml_file": get_asset_path("humanoid.xml"),
+        "top_heaviness": 1.0,
+        "floor_friction_scale": 1.0,
+        "dense_reward": False,
+        "initial_states": None,
+        "initial_state_idxs": None,
+        "init_dist": "uniform",
+        "n_rand_initial_states": 100,
+        "init_ranges": None,
+        "init_mode": "random",
+        "seed": None,
     },
     max_episode_steps=1000,
 )
