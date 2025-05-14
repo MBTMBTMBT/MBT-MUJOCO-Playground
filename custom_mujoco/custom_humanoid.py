@@ -78,7 +78,7 @@ class CustomHumanoid(HumanoidEnv):
         xml_file (str): Path to humanoid MuJoCo XML file.
         top_heaviness (float): Scaling factor for top-body parts (head, torso1, uwaist).
         floor_friction_scale (float): Multiplier to apply to floor friction.
-        dense_reward (bool): Whether to use dense reward based on forward displacement.
+        dense_reward (bool): (Placeholder) Whether to use dense reward based on forward displacement.
         initial_states (np.ndarray or None): If given, use this pool of initial states.
         initial_state_idxs (list[int] or None): Optional subset of indices into `initial_states`.
         init_dist (str): 'uniform' or 'gaussian', used if `initial_states` not provided.
@@ -203,49 +203,49 @@ class CustomHumanoid(HumanoidEnv):
             self.render()
         return obs, info
 
-    def _get_rew(self, x_pos_before: float, x_pos_after: float, action: np.ndarray) -> Tuple[float, dict]:
-        """
-        Compute reward using dense or sparse formulation.
-        - Dense: Use forward velocity.
-        - Sparse: Use original alive_bonus + linear velocity.
-        """
-        dt = self.model.opt.timestep
-
-        if self.dense_reward:
-            forward_reward = (x_pos_after - x_pos_before) / dt
-            main_reward = forward_reward
-        else:
-            forward_reward = (x_pos_after - x_pos_before) / dt
-            main_reward = forward_reward + self._alive_bonus
-
-        ctrl_cost = self._ctrl_cost_weight * np.square(action).sum()
-        impact_cost = np.clip(
-            self._impact_cost_weight * np.square(self.data.cfrc_ext).sum(),
-            *self._impact_cost_range,
-        )
-        total_reward = main_reward - ctrl_cost - impact_cost
-
-        return total_reward, {
-            "reward_forward": forward_reward,
-            "reward_ctrl_cost": -ctrl_cost,
-            "reward_impact_cost": -impact_cost,
-            "reward_total": total_reward,
-        }
-
-    def step(self, action: np.ndarray):
-        """
-        Execute one step of simulation and compute reward.
-        """
-        x_before = self.get_body_com("torso")[0]
-        self.do_simulation(action, self.frame_skip)
-        x_after = self.get_body_com("torso")[0]
-
-        obs = self._get_obs()
-        reward, reward_info = self._get_rew(x_before, x_after, action)
-        terminated = self._is_done()
-        info = {"reward_info": reward_info}
-
-        return obs, reward, terminated, False, info
+    # def _get_rew(self, x_pos_before: float, x_pos_after: float, action: np.ndarray) -> Tuple[float, dict]:
+    #     """
+    #     Compute reward using dense or sparse formulation.
+    #     - Dense: Use forward velocity.
+    #     - Sparse: Use original alive_bonus + linear velocity.
+    #     """
+    #     dt = self.model.opt.timestep
+    #
+    #     if self.dense_reward:
+    #         forward_reward = (x_pos_after - x_pos_before) / dt
+    #         main_reward = forward_reward
+    #     else:
+    #         forward_reward = (x_pos_after - x_pos_before) / dt
+    #         main_reward = forward_reward + self._alive_bonus
+    #
+    #     ctrl_cost = self._ctrl_cost_weight * np.square(action).sum()
+    #     impact_cost = np.clip(
+    #         self._impact_cost_weight * np.square(self.data.cfrc_ext).sum(),
+    #         *self._impact_cost_range,
+    #     )
+    #     total_reward = main_reward - ctrl_cost - impact_cost
+    #
+    #     return total_reward, {
+    #         "reward_forward": forward_reward,
+    #         "reward_ctrl_cost": -ctrl_cost,
+    #         "reward_impact_cost": -impact_cost,
+    #         "reward_total": total_reward,
+    #     }
+    #
+    # def step(self, action: np.ndarray):
+    #     """
+    #     Execute one step of simulation and compute reward.
+    #     """
+    #     x_before = self.get_body_com("torso")[0]
+    #     self.do_simulation(action, self.frame_skip)
+    #     x_after = self.get_body_com("torso")[0]
+    #
+    #     obs = self._get_obs()
+    #     reward, reward_info = self._get_rew(x_before, x_after, action)
+    #     terminated = self._is_done()
+    #     info = {"reward_info": reward_info}
+    #
+    #     return obs, reward, terminated, False, info
 
     def close(self):
         super().close()
