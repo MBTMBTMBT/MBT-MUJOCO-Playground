@@ -78,14 +78,22 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         pole_density (float): Density (kg/m³) for the pendulum body.
         cart_density (float): Density (kg/m³) for the cart body.
         xml_file (str): Path to the MuJoCo XML describing the inverted pendulum.
-        initial_states (np.ndarray or None): If provided, use this finite set of states for environment reset.
-        init_dist (str): Sampling distribution if `initial_states` is not provided, 'uniform' or 'gaussian' (default 'uniform').
-        n_rand_initial_states (int): The total number of initial states to generate (default 100).
-        init_ranges (list of tuple): Ranges [(low, high), ...] for each state dimension, in order [cart position, cart velocity, pole angle, pole angular velocity]. Defaults to [(-0.01, 0.01)] * 4 if None.
-        init_mode (str): One of 'random', 'sequential', or 'seeded'. Determines the policy for selecting the next initial state at reset.
-        dense_reward (bool): Whether to use a dense reward function based on distance from center.
-        seed (int or None): RNG seed for reproducibility if applicable.
-        **kwargs: Any extra kwargs are passed to the superclass (InvertedPendulumEnv).
+        initial_states (np.ndarray or None): Optional. If provided, use this finite set of 4D state vectors for environment reset. Each state is in the form [cart position, cart velocity, pole angle, pole angular velocity].
+        initial_state_idxs (list[int] or None): Optional. If provided, only use the specified subset of `initial_states` by index. Useful for curriculum learning or selective evaluation.
+        init_dist (str): Sampling distribution to generate random initial states if `initial_states` is not provided. Must be one of 'uniform' or 'gaussian' (default: 'uniform').
+        n_rand_initial_states (int): Number of initial states to generate when using automatic sampling (default: 100).
+        init_ranges (list of tuple): Ranges [(low, high), ...] for each of the 4 state variables. Defaults to [(-0.01, 0.01)] * 4 if not specified.
+        init_mode (str): Sampling policy to choose from the initial state pool. Options:
+            - 'random': Sample randomly at each reset.
+            - 'sequential': Cycle through initial states in order.
+            - 'seeded': Deterministic pseudo-random order using the given seed.
+        dense_reward (bool): Whether to use a dense reward function based on distance from the vertical upright position (default: False).
+        seed (int or None): Random seed for deterministic sampling and shuffling (used in 'seeded' mode).
+        **kwargs: Additional keyword arguments are passed directly to the base class `InvertedPendulumEnv`.
+
+    reset Args:
+        state (np.ndarray, optional): If provided, overrides all sampling and directly sets the environment to the given 4D state.
+        state_idx (int, optional): If provided, overrides sampling and uses the state at the specified index in `initial_states`.
 
     Notes:
         - The code ensures that the underlying MuJoCo model XML is modified on-the-fly each time an instance is created, and the temporary file
@@ -107,6 +115,7 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         cart_density: float = 1000.0,
         xml_file: str = get_asset_path("inverted_pendulum.xml"),
         initial_states=None,
+        initial_state_idxs=None,
         init_dist: str = "uniform",
         n_rand_initial_states: int = 100,
         init_ranges: list = None,
@@ -129,69 +138,80 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
         # Initialise RNG for determinism if seed is provided.
         self._rng = np.random.default_rng(seed)
         self.sample_mode = init_mode
-        self._init_index = 0  # Used for sequential and seeded sampling.
+        self._init_index = 0
 
         # Default state space ranges (position and velocity)
         self.init_ranges = init_ranges or [(-0.01, 0.01)] * 4
 
-        # Step 1: Use explicitly provided initial_states if available
+        # Step 1: Explicit initial_states input
         if initial_states is not None:
-            self.initial_states = np.array(initial_states)
+            all_states = np.array(initial_states)
         else:
-            # Step 2: Otherwise sample based on distribution and range
             lows = np.array([r[0] for r in self.init_ranges])
             highs = np.array([r[1] for r in self.init_ranges])
             if init_dist == "uniform":
-                self.initial_states = self._rng.uniform(
+                all_states = self._rng.uniform(
                     low=lows, high=highs, size=(n_rand_initial_states, 4)
                 )
             elif init_dist == "gaussian":
-                self.initial_states = np.clip(
+                all_states = np.clip(
                     self._rng.normal(
                         loc=0, scale=0.02, size=(n_rand_initial_states, 4)
                     ),
-                    lows,
-                    highs,
+                    lows, highs,
                 )
             else:
-                raise ValueError(
-                    "Unsupported init_dist: choose 'uniform' or 'gaussian'"
-                )
+                raise ValueError("Unsupported init_dist: choose 'uniform' or 'gaussian'")
 
-        # Precompute the sampling order for non-random reset modes.
+        # Step 2: Subset selection using initial_state_idxs
+        if initial_state_idxs is not None:
+            self.initial_states = all_states[np.array(initial_state_idxs)]
+        else:
+            self.initial_states = all_states
+
         if self.sample_mode == "seeded":
             self._index_order = np.arange(len(self.initial_states))
             self._rng.shuffle(self._index_order)
         elif self.sample_mode == "sequential":
             self._index_order = np.arange(len(self.initial_states))
         else:
-            self._index_order = None  # Random sampling.
+            self._index_order = None
 
-    def reset(self, **kwargs):
+    def reset(self, state: np.ndarray = None, state_idx: int = None, **kwargs):
         """
-        Reset the environment and set the initial simulator state according to the configured sampling mode.
+        Reset the environment and set the initial simulator state.
+        Supports override with an explicit state or state index.
+
+        Args:
+            state (np.ndarray, optional): A specific 4-dim initial state.
+            state_idx (int, optional): An index into the initial_states array.
 
         Returns:
             obs (np.ndarray): The observation after environment reset.
-            info (dict): Additional environment information (empty by default).
+            info (dict): Additional environment information.
         """
-        # Select an initial state from the pool, according to the requested sampling policy.
-        if self.sample_mode in ("sequential", "seeded"):
-            idx = self._index_order[self._init_index]
-            self._init_index = (self._init_index + 1) % len(self.initial_states)
-            state = self.initial_states[idx]
+        if state is not None:
+            # Use directly provided initial state
+            assert state.shape == (4,), "Provided state must be a 4-dimensional array."
+        elif state_idx is not None:
+            # Use specific index from initial_states
+            assert 0 <= state_idx < len(self.initial_states), "Invalid state_idx."
+            state = self.initial_states[state_idx]
         else:
-            idx = self._rng.integers(len(self.initial_states))
-            state = self.initial_states[idx]
+            # Default sampling
+            if self.sample_mode in ("sequential", "seeded"):
+                idx = self._index_order[self._init_index]
+                self._init_index = (self._init_index + 1) % len(self.initial_states)
+                state = self.initial_states[idx]
+            else:
+                idx = self._rng.integers(len(self.initial_states))
+                state = self.initial_states[idx]
 
-        # State order: [cart pos, cart vel, pole angle, pole ang vel]
-        qpos = np.array(
-            [state[0], state[2]], dtype=np.float64
-        )  # Position-based components.
-        qvel = np.array(
-            [state[1], state[3]], dtype=np.float64
-        )  # Velocity-based components.
+        # Convert to MuJoCo state format: qpos and qvel
+        qpos = np.array([state[0], state[2]], dtype=np.float64)
+        qvel = np.array([state[1], state[3]], dtype=np.float64)
         self.set_state(qpos, qvel)
+
         obs = self._get_obs()
         info = {}
         return obs, info

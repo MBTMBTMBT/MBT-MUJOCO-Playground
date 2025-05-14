@@ -84,6 +84,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         - Supports user-provided initial states or automatic sampling.
         - Uniform or Gaussian distributions across configurable ranges.
         - Reset modes include random, sequential, or deterministic via seed.
+        - Optionally restrict to a subset of initial states via `initial_state_idxs`.
 
     - Termination condition automatically adapts to the combined pole length,
       ensuring consistency even under structural changes.
@@ -108,6 +109,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         hinge2_stiffness (float): Restoring spring stiffness (N·m/rad) for the second joint.
         dense_reward (bool): Whether to use dense reward based on cart position (exp(-|x|)). If False, use classic reward.
         initial_states (np.ndarray or None): Optional fixed list of initial states (shape: [n, 6]).
+        initial_state_idxs (list[int] or None): Optional indices into `initial_states`, specifying a subset to use for reset sampling.
         init_dist (str): Distribution to sample initial states ("uniform" or "gaussian").
         n_rand_initial_states (int): Number of samples to generate if no explicit initial_states are provided.
         init_ranges (list of tuple): Ranges [(low, high), ...] for each state dimension, in order [cart position, pole1 angle, pole2 angle, cart velocity, pole1 angular velocity, pole2 angular velocity]. Defaults to [(-0.01, 0.01)] * 6 if None.
@@ -130,6 +132,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         hinge2_stiffness: float = 0.0,
         dense_reward: bool = False,
         initial_states=None,
+        initial_state_idxs=None,
         init_dist="uniform",
         n_rand_initial_states=100,
         init_ranges=None,
@@ -148,7 +151,7 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         self.hinge2_stiffness = hinge2_stiffness
 
         self.max_tip_y = pole1_length + pole2_length
-        self.fail_threshold = self.max_tip_y * 0.5  # Fail when tip drops 50% below top
+        self.fail_threshold = self.max_tip_y * 0.5
 
         modified_xml = modify_double_pendulum_xml(
             xml_path=xml_file,
@@ -169,59 +172,106 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
         # Default state space ranges (position and velocity)
         self.init_ranges = init_ranges or [(-0.01, 0.01)] * 6
 
-        # Step 1: Use explicitly provided initial_states if available
+        # Step 1: Determine full initial state pool
         if initial_states is not None:
-            self.initial_states = np.array(initial_states)
+            all_states = np.array(initial_states)
         else:
-            # Step 2: Otherwise sample based on distribution and range
             lows = np.array([r[0] for r in self.init_ranges])
             highs = np.array([r[1] for r in self.init_ranges])
             if init_dist == "uniform":
-                self.initial_states = self._rng.uniform(
-                    low=lows, high=highs, size=(n_rand_initial_states, 6)
-                )
+                all_states = self._rng.uniform(low=lows, high=highs, size=(n_rand_initial_states, 6))
             elif init_dist == "gaussian":
-                self.initial_states = np.clip(
-                    self._rng.normal(
-                        loc=0, scale=0.02, size=(n_rand_initial_states, 6)
-                    ),
-                    lows,
-                    highs,
+                all_states = np.clip(
+                    self._rng.normal(loc=0, scale=0.02, size=(n_rand_initial_states, 6)),
+                    lows, highs,
                 )
             else:
-                raise ValueError(
-                    "Unsupported init_dist: choose 'uniform' or 'gaussian'"
-                )
+                raise ValueError("Unsupported init_dist: choose 'uniform' or 'gaussian'")
 
-        # Step 3: Precompute reset index order for sequential or seeded modes
+        # Step 2: Use only the selected subset if indices are provided
+        if initial_state_idxs is not None:
+            self.initial_states = all_states[np.array(initial_state_idxs)]
+        else:
+            self.initial_states = all_states
+
+        # Step 3: Compute index order for deterministic modes
         if init_mode == "seeded":
             self._index_order = self._rng.permutation(len(self.initial_states))
         elif init_mode == "sequential":
             self._index_order = np.arange(len(self.initial_states))
         else:
-            self._index_order = None  # Random mode: no order required
+            self._index_order = None
 
-    def reset_model(self):
+    def reset(
+            self,
+            *,
+            seed: Optional[int] = None,
+            options: Optional[dict] = None,
+    ):
         """
-        Resets the environment by explicitly setting a sampled initial state.
-        The state is selected according to the configured sampling strategy.
+        Reset the environment. Overrides the default reset method to support custom
+        state or state_idx from options dictionary.
+
+        Args:
+            seed (int, optional): Random seed for reproducibility.
+            options (dict, optional): Can contain the following keys:
+                - 'state': np.ndarray of shape (6,), used to manually specify the initial state.
+                - 'state_idx': int, used to pick a state from `self.initial_states`.
+
+        Returns:
+            observation (np.ndarray): Initial observation.
+            info (dict): Reset-related info.
+        """
+        super().reset(seed=seed)
+
+        # Reset MuJoCo data to match XML model
+        mujoco.mj_resetData(self.model, self.data)
+
+        # Parse options
+        state = options.get("state") if options is not None else None
+        state_idx = options.get("state_idx") if options is not None else None
+
+        # Call reset_model with control
+        observation = self.reset_model(state=state, state_idx=state_idx)
+        info = self._get_reset_info()
+
+        if self.render_mode == "human":
+            self.render()
+
+        return observation, info
+
+    def reset_model(self, state: np.ndarray = None, state_idx: int = None):
+        """
+        Resets the environment by selecting or specifying an initial state.
+
+        Args:
+            state (np.ndarray, optional): If provided, use this exact 6D state directly.
+            state_idx (int, optional): If provided, use the state at the given index in `initial_states`.
 
         Returns:
             observation (np.ndarray): The initial observation after reset.
         """
-        # Select initial state based on reset mode
-        if self.sample_mode in ("sequential", "seeded"):
-            idx = self._index_order[self._init_index]
-            self._init_index = (self._init_index + 1) % len(self.initial_states)
-            state = self.initial_states[idx]
+        if state is not None:
+            # Use explicitly provided state
+            assert state.shape == (6,), "Provided state must be a 6-dimensional array."
+        elif state_idx is not None:
+            # Use specified index from state pool
+            assert 0 <= state_idx < len(self.initial_states), "state_idx out of bounds."
+            state = self.initial_states[state_idx]
         else:
-            state = self.initial_states[self._rng.integers(len(self.initial_states))]
+            # Sample from available pool
+            if self.sample_mode in ("sequential", "seeded"):
+                idx = self._index_order[self._init_index]
+                self._init_index = (self._init_index + 1) % len(self.initial_states)
+                state = self.initial_states[idx]
+            else:
+                state = self.initial_states[self._rng.integers(len(self.initial_states))]
 
-        # Set qpos (positions) and qvel (velocities)
+        # Set initial qpos (positions) and qvel (velocities)
         qpos = self.init_qpos.copy()
         qvel = self.init_qvel.copy()
-        qpos[:3] = state[:3]  # [cart x, hinge1, hinge2]
-        qvel[:3] = state[3:]  # [cart vx, hinge1 v, hinge2 v]
+        qpos[:3] = state[:3]  # [x, theta1, theta2]
+        qvel[:3] = state[3:]  # [vx, dtheta1, dtheta2]
 
         self.set_state(qpos, qvel)
         return self._get_obs()
