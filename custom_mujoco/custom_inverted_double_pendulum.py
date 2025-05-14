@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 import mujoco
 from gymnasium.envs.mujoco.inverted_double_pendulum_v5 import InvertedDoublePendulumEnv
