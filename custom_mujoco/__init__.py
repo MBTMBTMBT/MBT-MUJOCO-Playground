@@ -13,6 +13,7 @@ else:
 from custom_mujoco.custom_inverted_pendulum import CustomInvertedPendulum
 from custom_mujoco.custom_inverted_double_pendulum import CustomInvertedDoublePendulum
 from custom_mujoco.custom_humanoidstandup import CustomHumanoidStandup
+from custom_mujoco.custom_humanoid import CustomHumanoid
 from custom_mujoco.utils import EvalProgressGifCallback
 from gymnasium.envs.registration import register
 
