@@ -106,14 +106,23 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
             lows = np.array([r[0] for r in self.init_ranges])
             highs = np.array([r[1] for r in self.init_ranges])
             if init_dist == "uniform":
-                all_states = self._rng.uniform(low=lows, high=highs, size=(n_rand_initial_states, self._state_dim))
+                all_states = self._rng.uniform(
+                    low=lows, high=highs, size=(n_rand_initial_states, self._state_dim)
+                )
             elif init_dist == "gaussian":
                 all_states = np.clip(
-                    self._rng.normal(loc=0.0, scale=0.5 * (highs - lows), size=(n_rand_initial_states, self._state_dim)),
-                    lows, highs,
+                    self._rng.normal(
+                        loc=0.0,
+                        scale=0.5 * (highs - lows),
+                        size=(n_rand_initial_states, self._state_dim),
+                    ),
+                    lows,
+                    highs,
                 )
             else:
-                raise ValueError("Unsupported init_dist: choose 'uniform' or 'gaussian'")
+                raise ValueError(
+                    "Unsupported init_dist: choose 'uniform' or 'gaussian'"
+                )
 
         # Step 2: Restrict to indexed subset if provided
         if initial_state_idxs is not None:
@@ -129,7 +138,9 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
         else:
             self._index_order = None
 
-    def reset_model(self, state: Optional[np.ndarray] = None, state_idx: Optional[int] = None):
+    def reset_model(
+        self, state: Optional[np.ndarray] = None, state_idx: Optional[int] = None
+    ):
         """
         Reset the model to a sampled or explicitly given initial state.
 
@@ -151,10 +162,12 @@ class CustomHumanoidStandup(HumanoidStandupEnv):
                 self._init_index = (self._init_index + 1) % len(self.initial_states)
                 state = self.initial_states[idx]
             else:
-                state = self.initial_states[self._rng.integers(len(self.initial_states))]
+                state = self.initial_states[
+                    self._rng.integers(len(self.initial_states))
+                ]
 
-        qpos = self.init_qpos + state[:self.nq]
-        qvel = self.init_qvel + state[self.nq:]
+        qpos = self.init_qpos + state[: self.nq]
+        qvel = self.init_qvel + state[self.nq :]
         self.set_state(qpos, qvel)
         return self._get_obs()
 

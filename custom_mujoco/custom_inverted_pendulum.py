@@ -158,10 +158,13 @@ class CustomInvertedPendulum(InvertedPendulumEnv):
                     self._rng.normal(
                         loc=0, scale=0.02, size=(n_rand_initial_states, 4)
                     ),
-                    lows, highs,
+                    lows,
+                    highs,
                 )
             else:
-                raise ValueError("Unsupported init_dist: choose 'uniform' or 'gaussian'")
+                raise ValueError(
+                    "Unsupported init_dist: choose 'uniform' or 'gaussian'"
+                )
 
         # Step 2: Subset selection using initial_state_idxs
         if initial_state_idxs is not None:

@@ -180,14 +180,21 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
             lows = np.array([r[0] for r in self.init_ranges])
             highs = np.array([r[1] for r in self.init_ranges])
             if init_dist == "uniform":
-                all_states = self._rng.uniform(low=lows, high=highs, size=(n_rand_initial_states, 6))
+                all_states = self._rng.uniform(
+                    low=lows, high=highs, size=(n_rand_initial_states, 6)
+                )
             elif init_dist == "gaussian":
                 all_states = np.clip(
-                    self._rng.normal(loc=0, scale=0.02, size=(n_rand_initial_states, 6)),
-                    lows, highs,
+                    self._rng.normal(
+                        loc=0, scale=0.02, size=(n_rand_initial_states, 6)
+                    ),
+                    lows,
+                    highs,
                 )
             else:
-                raise ValueError("Unsupported init_dist: choose 'uniform' or 'gaussian'")
+                raise ValueError(
+                    "Unsupported init_dist: choose 'uniform' or 'gaussian'"
+                )
 
         # Step 2: Use only the selected subset if indices are provided
         if initial_state_idxs is not None:
@@ -204,10 +211,10 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
             self._index_order = None
 
     def reset(
-            self,
-            *,
-            seed: Optional[int] = None,
-            options: Optional[dict] = None,
+        self,
+        *,
+        seed: Optional[int] = None,
+        options: Optional[dict] = None,
     ):
         """
         Reset the environment. Overrides the default reset method to support custom
@@ -266,7 +273,9 @@ class CustomInvertedDoublePendulum(InvertedDoublePendulumEnv):
                 self._init_index = (self._init_index + 1) % len(self.initial_states)
                 state = self.initial_states[idx]
             else:
-                state = self.initial_states[self._rng.integers(len(self.initial_states))]
+                state = self.initial_states[
+                    self._rng.integers(len(self.initial_states))
+                ]
 
         # Set initial qpos (positions) and qvel (velocities)
         qpos = self.init_qpos.copy()
