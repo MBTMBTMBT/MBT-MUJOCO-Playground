@@ -33,6 +33,7 @@ register(
         "init_ranges": None,
         "init_mode": "random",
         "dense_reward": False,
+        "frame_skip": 1,
         "seed": None,
     },
     max_episode_steps=500,
@@ -60,6 +61,7 @@ register(
         "init_ranges": None,
         "init_mode": "random",
         "dense_reward": False,
+        "frame_skip": 1,
         "seed": None,
     },
     max_episode_steps=500,
@@ -79,6 +81,7 @@ register(
         "n_rand_initial_states": 100,  # Number of samples if using random init
         "init_ranges": None,  # Sampling range for state variables
         "init_mode": "random",  # Mode: "random", "sequential", "seeded"
+        "frame_skip": 1,
         "seed": None,  # RNG seed
     },
     max_episode_steps=1000,
@@ -98,6 +101,7 @@ register(
         "n_rand_initial_states": 100,
         "init_ranges": None,
         "init_mode": "random",
+        "frame_skip": 1,
         "seed": None,
     },
     max_episode_steps=1000,
